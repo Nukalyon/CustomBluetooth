@@ -5,21 +5,15 @@ import android.annotation.SuppressLint
 import android.bluetooth.BluetoothAdapter
 import android.bluetooth.BluetoothDevice
 import android.bluetooth.BluetoothManager
-import android.companion.AssociationInfo
-import android.companion.AssociationRequest
-import android.companion.BluetoothDeviceFilter
 import android.companion.CompanionDeviceManager
 import android.content.Context
 import android.content.IntentFilter
-import android.content.IntentSender
 import android.content.pm.PackageManager
-import android.os.ParcelUuid
 import android.util.Log
 import androidx.annotation.RequiresPermission
-import androidx.core.app.ActivityCompat.startIntentSenderForResult
 import com.example.custombluetooth.model.BluetoothDeviceReceiver
-import com.example.custombluetooth.model.BluetoothReceiver
 import com.example.custombluetooth.model.BluetoothError
+import com.example.custombluetooth.model.BluetoothReceiver
 import com.example.custombluetooth.model.ConnectDeviceThread
 import com.example.custombluetooth.model.ConnectionState
 import com.example.custombluetooth.model.ScanState
@@ -30,9 +24,6 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import java.io.IOException
 import java.util.UUID
-import java.util.concurrent.Executor
-import java.util.concurrent.Executors
-import java.util.regex.Pattern
 
 /**
  * To continue

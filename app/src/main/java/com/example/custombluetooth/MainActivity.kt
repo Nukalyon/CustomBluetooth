@@ -1,5 +1,6 @@
 package com.example.custombluetooth
 
+import android.Manifest
 import android.annotation.SuppressLint
 import android.bluetooth.BluetoothAdapter
 import android.bluetooth.BluetoothDevice
@@ -7,11 +8,10 @@ import android.bluetooth.BluetoothManager
 import android.companion.AssociationInfo
 import android.companion.AssociationRequest
 import android.companion.BluetoothDeviceFilter
-import android.companion.BluetoothLeDeviceFilter
 import android.companion.CompanionDeviceManager
 import android.content.Intent
 import android.content.IntentSender
-import android.content.IntentSender.SendIntentException
+import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
 import android.util.Log
@@ -20,7 +20,6 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.IntentSenderRequest
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.annotation.RequiresApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -67,7 +66,7 @@ class MainActivity : ComponentActivity() {
         get() = bluetoothAdapter?.isEnabled == true
 
     private val companionManager by lazy{
-        getSystemService(CompanionDeviceManager::class.java)
+        getSystemService(CompanionDeviceManager::class.java) as CompanionDeviceManager
     }
     private val executor : Executor = Executor{ it.run() }
 
@@ -86,7 +85,7 @@ class MainActivity : ComponentActivity() {
             perms ->
                 val canEnableBluetooth =
                     if (isSDKSupToVersion(Build.VERSION_CODES.S)) {
-                        perms[android.Manifest.permission.BLUETOOTH_CONNECT] == true
+                        perms[Manifest.permission.BLUETOOTH_CONNECT] == true
                     } else { true }
                 if(canEnableBluetooth && !isBluetoothEnabled){
                     enableBluetoothLauncher.launch(
@@ -98,10 +97,9 @@ class MainActivity : ComponentActivity() {
         if (isSDKSupToVersion(Build.VERSION_CODES.S)) {
             permissionLauncher.launch(
                 arrayOf(
-                    android.Manifest.permission.BLUETOOTH_SCAN,
-                    android.Manifest.permission.BLUETOOTH_CONNECT,
-                    android.Manifest.permission.ACCESS_FINE_LOCATION
-                    //android.Manifest.permission.ACCESS_COARSE_LOCATION
+                    Manifest.permission.BLUETOOTH_SCAN,
+                    Manifest.permission.BLUETOOTH_CONNECT,
+                    Manifest.permission.BLUETOOTH_ADMIN
                 )
             )
         }
@@ -206,7 +204,6 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    @SuppressLint("MissingPermission")
     fun launchAssociation() {
 //        Log.d("DEBUG","Enter launchAssociation()")
 //        if (ContextCompat.checkSelfPermission(this, Manifest.permission.BLUETOOTH_SCAN) != PackageManager.PERMISSION_GRANTED) {
@@ -219,87 +216,92 @@ class MainActivity : ComponentActivity() {
             .build()
 
         val pairingRequest: AssociationRequest = AssociationRequest.Builder()
+//            .setDeviceProfile(AssociationRequest.DEVICE_PROFILE_NEARBY_DEVICE_STREAMING)
             .addDeviceFilter(deviceFilter)
             .setSingleDevice(false)
             .build()
 
         try {
-            if (isSDKSupToVersion(Build.VERSION_CODES.TIRAMISU)) {
-                Log.d("DEBUG", "SDK IS >= UPSIDE_DOWN_CAKE")
-                companionManager.associate(
-                    pairingRequest,
-                    executor,
-                    object : CompanionDeviceManager.Callback() {
-                        override fun onAssociationPending(intentSender: IntentSender) {
-                            Log.d("DEBUG", "onAssociationPending enter")
-                            val request = IntentSenderRequest.Builder(intentSender).build()
-                            Log.d("DEBUG", "AssociationLauncher start")
-                            associationLauncher.launch(request)
 
-                        }
+            if(hasPermissions(
+                    listOf( Manifest.permission.BLUETOOTH_SCAN,
+                            Manifest.permission.BLUETOOTH_CONNECT)
+            )){
+                if (isSDKSupToVersion(Build.VERSION_CODES.TIRAMISU)) {
 
-                        @SuppressLint("MissingPermission")
-                        override fun onAssociationCreated(associationInfo: AssociationInfo) {
-                            Toast.makeText(
-                                applicationContext,
-                                "Device found :\nName: ${associationInfo.id}, address: ${associationInfo.deviceMacAddress}",
-                                Toast.LENGTH_LONG
-                            ).show()
-                        }
+                    Log.d("DEBUG", "SDK IS >= UPSIDE_DOWN_CAKE")
+                    companionManager.associate(
+                        pairingRequest,
+                        executor,
+                        object : CompanionDeviceManager.Callback() {
+                            override fun onAssociationPending(intentSender: IntentSender) {
+                                Log.d("DEBUG", "onAssociationPending enter")
+                                val request = IntentSenderRequest.Builder(intentSender).build()
+                                Log.d("DEBUG", "AssociationLauncher start")
+                                associationLauncher.launch(request)
 
-                        override fun onFailure(p0: CharSequence?) {
-                            Log.d("DEBUG", "onFailure enter")
-                        }
-                    })
-            } else {
-//            Log.d("DEBUG","SDK IS < UPSIDE_DOWN_CAKE")
-//            if(isSDKSupToVersion(Build.VERSION_CODES.TIRAMISU))
-//            {
-                Log.d("DEBUG", "SDK IS < TIRAMISU")
-
-//                val bondedDevices: Set<BluetoothDevice>? = bluetoothAdapter?.bondedDevices
-//                bondedDevices?.forEach {
-//                    Log.d("DEBUG", "Bonded device: ${it.name} - ${it.address}")
-//                    // If your target device is here, pairing UI may not show up
-//                }
-
-
-                companionManager.associate(
-                    pairingRequest,
-                    object : CompanionDeviceManager.Callback() {
-
-                        override fun onAssociationPending(intentSender: IntentSender) {
-                            Log.d("DEBUG", "onAssociationPending - launching intent for API < 33")
-                            try {
-                                startIntentSenderForResult(
-                                    intentSender,
-                                    SELECT_DEVICE_REQUEST_CODE,
-                                    null, 0, 0, 0
-                                )
-                            } catch (e: SendIntentException) {
-                                Log.e("DEBUG", "Failed to launch IntentSender: ${e.message}")
                             }
-                        }
 
-                        @SuppressLint("NewApi", "MissingPermission")
-                        override fun onAssociationCreated(associationInfo: AssociationInfo) {
-                            val result: BluetoothDevice? =
-                                associationInfo.associatedDevice?.bluetoothDevice
-                            if (result != null) {
+                            @SuppressLint("MissingPermission")
+                            override fun onAssociationCreated(associationInfo: AssociationInfo) {
                                 Toast.makeText(
                                     applicationContext,
-                                    "We have found this device :\n" +
-                                            "Name: ${result.name ?: "N/o"}, address: ${result.address}",
+                                    "Device found :\nName: ${associationInfo.id}, address: ${associationInfo.deviceMacAddress}",
                                     Toast.LENGTH_LONG
                                 ).show()
                             }
-                        }
 
-                        override fun onFailure(error: CharSequence?) {
-                            Log.e("DEBUG", "Association failed: $error")
-                        }
-                    }, null
-                )
+                            override fun onFailure(p0: CharSequence?) {
+                                Log.d("DEBUG", "onFailure enter")
+                            }
+                        })
+                } else {
+                    Log.d("DEBUG", "SDK IS < TIRAMISU")
+                    companionManager.associate(
+                        pairingRequest,
+                        object : CompanionDeviceManager.Callback() {
+
+    //                        override fun onAssociationPending(intentSender: IntentSender) {
+    //                            Log.d("DEBUG", "onAssociationPending - launching intent for API < 33")
+    //                            try {
+    //                                startIntentSenderForResult(
+    //                                    intentSender,
+    //                                    SELECT_DEVICE_REQUEST_CODE,
+    //                                    null, 0, 0, 0
+    //                                )
+    //                            } catch (e: SendIntentException) {
+    //                                Log.e("DEBUG", "Failed to launch IntentSender: ${e.message}")
+    //                            }
+    //                        }
+
+                            override fun onDeviceFound(intentSender: IntentSender) {
+                                Log.d("DEBUG", "onDeviceFound enter")
+                                val request = IntentSenderRequest.Builder(intentSender).build()
+                                Log.d("DEBUG", "AssociationLauncher start")
+                                associationLauncher.launch(request)
+                            }
+
+    //                        @SuppressLint("NewApi", "MissingPermission")
+    //                        override fun onAssociationCreated(associationInfo: AssociationInfo) {
+    //                            val result: BluetoothDevice? =
+    //                                associationInfo.associatedDevice?.bluetoothDevice
+    //                            if (result != null) {
+    //                                Toast.makeText(
+    //                                    applicationContext,
+    //                                    "We have found this device :\n" +
+    //                                            "Name: ${result.name ?: "N/o"}, address: ${result.address}",
+    //                                    Toast.LENGTH_LONG
+    //                                ).show()
+    //                            }
+    //                        }
+
+                            override fun onFailure(error: CharSequence?) {
+                                Log.e("DEBUG", "Association failed: $error")
+                            }
+                        }, null
+                    )
+                    Log.d("DEBUG", "After manager called associate()")
+                }
             }
         }
         catch (exc : IOException){
@@ -309,6 +311,19 @@ class MainActivity : ComponentActivity() {
 
     private fun isSDKSupToVersion(version : Int) : Boolean{
         return (Build.VERSION.SDK_INT >= version)
+    }
+
+    private fun hasPermissions(permission: List<String>): Boolean {
+        var res : Boolean = true
+        permission.forEach {
+            perm ->
+            val temp = checkSelfPermission(perm) == PackageManager.PERMISSION_GRANTED
+            Log.e("DEBUG","hasPermission? for $perm = $temp")
+            if(!temp){
+                res = false
+            }
+        }
+        return res
     }
 
 
@@ -325,8 +340,6 @@ class MainActivity : ComponentActivity() {
                 when(resultCode){
                     RESULT_OK ->{
                         if(isSDKSupToVersion(Build.VERSION_CODES.TIRAMISU)){
-
-
                             val deviceToPair: BluetoothDevice? =
                                 if(isSDKSupToVersion(Build.VERSION_CODES.UPSIDE_DOWN_CAKE)){
                                     val associationInfo : AssociationInfo ?=
