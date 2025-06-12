@@ -45,10 +45,12 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.core.app.ActivityCompat
 import com.example.custombluetooth.controller.CustomBluetoothController
 import com.example.custombluetooth.ui.theme.CustomBluetoothTheme
 import com.example.custombluetooth.view.BluetoothView
 import java.io.IOException
+import java.security.Permission
 import java.util.concurrent.Executor
 import java.util.regex.Pattern
 
@@ -69,11 +71,19 @@ class MainActivity : ComponentActivity() {
         getSystemService(CompanionDeviceManager::class.java) as CompanionDeviceManager
     }
     private val executor : Executor = Executor{ it.run() }
+    private lateinit var controller: CustomBluetoothController
+
+
+    var TIME_VISIBLE = 60
+    val makeDeviceVisible = registerForActivityResult(
+        ActivityResultContracts.StartActivityForResult()
+    ) {/* */ }
 
 
     @SuppressLint("ObsoleteSdkInt", "MissingPermission")
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        controller = CustomBluetoothController.getInstance(this)
 
         val enableBluetoothLauncher = registerForActivityResult(
             ActivityResultContracts.StartActivityForResult()
@@ -87,7 +97,9 @@ class MainActivity : ComponentActivity() {
                     if (isSDKSupToVersion(Build.VERSION_CODES.S)) {
                         perms[Manifest.permission.BLUETOOTH_CONNECT] == true
                     } else { true }
+                addDebug("INFO", "canEnableBluetooth = $canEnableBluetooth")
                 if(canEnableBluetooth && !isBluetoothEnabled){
+                    addDebug("DEBUG", "request enable Bluetooth")
                     enableBluetoothLauncher.launch(
                         Intent(BluetoothAdapter.ACTION_REQUEST_ENABLE)
                     )
@@ -104,10 +116,10 @@ class MainActivity : ComponentActivity() {
             )
         }
 
+
         setContent{
             CustomBluetoothTheme {
-                val btController = CustomBluetoothController.getInstance(applicationContext)
-                val view = BluetoothView.getInstance(btController)
+                val view = BluetoothView.getInstance(controller)
                 val state = view.state.collectAsState()
 
                 Surface(
@@ -179,7 +191,7 @@ class MainActivity : ComponentActivity() {
     ){
         result ->
         if(result.resultCode == RESULT_OK){
-            Log.d("DEBUG","AssociationLauncher Found a result -> RESULT_OK")
+            addDebug("INFO","AssociationLauncher Found a result -> RESULT_OK")
             val data = result.data
             val device =
                 if(isSDKSupToVersion(Build.VERSION_CODES.TIRAMISU)){
@@ -194,16 +206,18 @@ class MainActivity : ComponentActivity() {
                     // API 32 and lower
                     intent?.getParcelableExtra(CompanionDeviceManager.EXTRA_DEVICE)
                 }
-            Log.d("DEBUG","device found :${device?.name ?: device?.address}")
+            addDebug("INFO","device found :${device?.name ?: device?.address}")
             device?.createBond() ?: run {
-                Log.d("DEBUG","No device found")
+                addDebug("DEBUG","No device found")
             }
         }
         else {
-            Log.d("DEBUG","Association refused by user -> RESULT_CANCELED")
+            addDebug("ERROR","Association refused by user -> RESULT_CANCELED")
         }
     }
 
+    // https://stackoverflow.com/questions/77294327/androids-companiondevicemanager-associate-fails-to-find-any-device-when-filte
+    @SuppressLint("MissingPermission")
     fun launchAssociation() {
 //        Log.d("DEBUG","Enter launchAssociation()")
 //        if (ContextCompat.checkSelfPermission(this, Manifest.permission.BLUETOOTH_SCAN) != PackageManager.PERMISSION_GRANTED) {
@@ -222,22 +236,26 @@ class MainActivity : ComponentActivity() {
             .build()
 
         try {
-
+            if(hasPermissions(Manifest.permission.BLUETOOTH_SCAN)){
+                addDebug("DEBUG","isDicovering = ${bluetoothAdapter?.isDiscovering}")
+            }
             if(hasPermissions(
                     listOf( Manifest.permission.BLUETOOTH_SCAN,
                             Manifest.permission.BLUETOOTH_CONNECT)
-            )){
+            ) && bluetoothAdapter?.isDiscovering == true){
+                addDebug("INFO","SDK IS ${Build.VERSION.SDK_INT}")
+
                 if (isSDKSupToVersion(Build.VERSION_CODES.TIRAMISU)) {
 
-                    Log.d("DEBUG", "SDK IS >= UPSIDE_DOWN_CAKE")
+                    addDebug("DEBUG", "SDK IS >= UPSIDE_DOWN_CAKE")
                     companionManager.associate(
                         pairingRequest,
                         executor,
                         object : CompanionDeviceManager.Callback() {
                             override fun onAssociationPending(intentSender: IntentSender) {
-                                Log.d("DEBUG", "onAssociationPending enter")
+                                addDebug("DEBUG", "onAssociationPending enter")
                                 val request = IntentSenderRequest.Builder(intentSender).build()
-                                Log.d("DEBUG", "AssociationLauncher start")
+                                addDebug("DEBUG", "AssociationLauncher start")
                                 associationLauncher.launch(request)
 
                             }
@@ -252,17 +270,17 @@ class MainActivity : ComponentActivity() {
                             }
 
                             override fun onFailure(p0: CharSequence?) {
-                                Log.d("DEBUG", "onFailure enter")
+                                addDebug("ERROR", "onFailure enter")
                             }
                         })
                 } else {
-                    Log.d("DEBUG", "SDK IS < TIRAMISU")
+                    addDebug("DEBUG", "SDK IS < TIRAMISU")
                     companionManager.associate(
                         pairingRequest,
                         object : CompanionDeviceManager.Callback() {
 
     //                        override fun onAssociationPending(intentSender: IntentSender) {
-    //                            Log.d("DEBUG", "onAssociationPending - launching intent for API < 33")
+    //                            addDebug("DEBUG", "onAssociationPending - launching intent for API < 33")
     //                            try {
     //                                startIntentSenderForResult(
     //                                    intentSender,
@@ -275,9 +293,9 @@ class MainActivity : ComponentActivity() {
     //                        }
 
                             override fun onDeviceFound(intentSender: IntentSender) {
-                                Log.d("DEBUG", "onDeviceFound enter")
+                                addDebug("DEBUG", "onDeviceFound enter")
                                 val request = IntentSenderRequest.Builder(intentSender).build()
-                                Log.d("DEBUG", "AssociationLauncher start")
+                                addDebug("DEBUG", "AssociationLauncher start")
                                 associationLauncher.launch(request)
                             }
 
@@ -296,16 +314,23 @@ class MainActivity : ComponentActivity() {
     //                        }
 
                             override fun onFailure(error: CharSequence?) {
-                                Log.e("DEBUG", "Association failed: $error")
+                                addDebug("ERROR", "Association failed: $error")
                             }
                         }, null
                     )
-                    Log.d("DEBUG", "After manager called associate()")
+                    addDebug("DEBUG", "After manager called associate()")
                 }
+            }
+            else{
+                //Request visibility of the device
+                //if granted
+                val visibility = Intent(BluetoothAdapter.ACTION_REQUEST_DISCOVERABLE)
+                visibility.putExtra(BluetoothAdapter.EXTRA_DISCOVERABLE_DURATION, TIME_VISIBLE)
+                makeDeviceVisible.launch(visibility)
             }
         }
         catch (exc : IOException){
-            Log.e("DEBUG", "Exception during associate(): ${exc.message}")
+            addDebug("ERROR", "Exception during associate(): ${exc.message}")
         }
     }
 
@@ -317,13 +342,32 @@ class MainActivity : ComponentActivity() {
         var res : Boolean = true
         permission.forEach {
             perm ->
-            val temp = checkSelfPermission(perm) == PackageManager.PERMISSION_GRANTED
-            Log.e("DEBUG","hasPermission? for $perm = $temp")
+            val temp = ActivityCompat.checkSelfPermission(this, perm) == PackageManager.PERMISSION_GRANTED
+            addDebug("DEBUG","hasPermission? for ${perm.removePrefix("android.permission.")} = $temp")
             if(!temp){
                 res = false
             }
         }
         return res
+    }
+
+    private fun hasPermissions(permission: String): Boolean{
+        return ActivityCompat.checkSelfPermission(this, permission) == PackageManager.PERMISSION_GRANTED
+    }
+
+    private fun addDebug(tag : String, mess : String){
+        when(tag){
+            "DEBUG" ->{
+                Log.d(tag, mess)
+            }
+            "ERROR"->{
+                Log.e(tag, mess)
+            }
+            "INFO"->{
+                Log.i(tag,mess)
+            }
+        }
+        controller.registerDebugMessage(mess)
     }
 
 

@@ -70,7 +70,7 @@ class CustomBluetoothController private constructor(
     private val receiverDeviceFound = BluetoothDeviceReceiver{
         newDevice ->
         debug = "FoundDeviceReceiver returned $newDevice"
-        Log.d("DEBUG", debug)
+        registerDebugMessage(debug)
 
         _debugMessages.update { messages ->
             if(!messages.contains(debug)) messages + debug else messages}
@@ -85,13 +85,12 @@ class CustomBluetoothController private constructor(
             _connectionState.value = ConnectionState.Connected
             _errorState.value = null
             debug = "Connected to device: ${device.name} / ${device.address}"
-            debug = "Connected to device: ${device.name} / ${device.address}"
         } else {
             _connectionState.value = ConnectionState.Disconnected
             debug = "Disconnected from device: ${device.name} / ${device.address}"
         }
         Log.d("Debug",debug.toString())
-        _debugMessages.update { messages -> messages + debug }
+        registerDebugMessage(debug)
     }
 
     init {
@@ -171,7 +170,7 @@ class CustomBluetoothController private constructor(
     // Vérifie si la permission spécifiée est accordée
     private fun hasPermissions(permission: String): Boolean {
         debug = "hasPermission? for $permission"
-        _debugMessages.update { messages -> messages + debug }
+        registerDebugMessage(debug)
         Log.d("DEBUG", debug)
         return appContext.checkSelfPermission(permission) == PackageManager.PERMISSION_GRANTED
     }
@@ -184,7 +183,7 @@ class CustomBluetoothController private constructor(
     private fun updatePairedDevices() {
         debug = "updatePairedDevices called"
         Log.d("DEBUG", debug)
-        _debugMessages.update { messages -> messages + debug }
+        registerDebugMessage(debug)
         if (!hasPermissions(Manifest.permission.BLUETOOTH_CONNECT)) {
             return
         }
@@ -199,6 +198,10 @@ class CustomBluetoothController private constructor(
         catch (exc: IOException){
             Log.d("DEBUG", "UnregisterReceiver failed, details:\n${exc.printStackTrace()}")
         }
+    }
+
+    fun registerDebugMessage(debug : String){
+        _debugMessages.update { messages -> messages + debug }
     }
 
     // Singleton Pattern
