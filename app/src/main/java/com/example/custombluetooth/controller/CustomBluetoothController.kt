@@ -5,12 +5,12 @@ import android.annotation.SuppressLint
 import android.bluetooth.BluetoothAdapter
 import android.bluetooth.BluetoothDevice
 import android.bluetooth.BluetoothManager
-import android.companion.CompanionDeviceManager
 import android.content.Context
 import android.content.IntentFilter
 import android.content.pm.PackageManager
 import android.util.Log
 import androidx.annotation.RequiresPermission
+import androidx.core.app.ActivityCompat
 import com.example.custombluetooth.model.BluetoothDeviceReceiver
 import com.example.custombluetooth.model.BluetoothError
 import com.example.custombluetooth.model.BluetoothReceiver
@@ -25,13 +25,6 @@ import kotlinx.coroutines.flow.update
 import java.io.IOException
 import java.util.UUID
 
-/**
- * To continue
- * https://www.blackbox.ai/chat/4iY6KyH
- */
-
-private const val SELECT_DEVICE_REQUEST_CODE = 0
-
 class CustomBluetoothController private constructor(
     private val appContext: Context
 ) : IBluetoothController, DataTransferService.MessageListener{
@@ -41,9 +34,6 @@ class CustomBluetoothController private constructor(
     }
     private val adapter by lazy {
         manager?.adapter
-    }
-    val companionManager : CompanionDeviceManager by lazy {
-        appContext.getSystemService(CompanionDeviceManager::class.java)
     }
 
     private val _scannedDevices = MutableStateFlow<List<BluetoothDevice>>(emptyList())
@@ -65,12 +55,24 @@ class CustomBluetoothController private constructor(
         get() = _errorState.asStateFlow()
     override val debugMessages: StateFlow<List<String>>
         get() = _debugMessages.asStateFlow()
-    private lateinit var debug : String
 
+    private val isSingleDevice = true
+    private val regex = "Fea".toRegex()
+    @SuppressLint("MissingPermission")
     private val receiverDeviceFound = BluetoothDeviceReceiver{
         newDevice ->
-        debug = "FoundDeviceReceiver returned $newDevice"
-        registerDebugMessage(debug)
+        if(isSingleDevice == true && isMatchingParameters(newDevice, true, false)){
+            registerDebugMessage("DEBUG","Device is matching parameters : = $newDevice")
+            stopDiscovery()
+        }
+        var debug :String
+        if(hasPermissions(Manifest.permission.BLUETOOTH_CONNECT)){
+            debug = "FoundDeviceReceiver returned ${newDevice.name}"
+        }
+        else{
+            debug = "FoundDeviceReceiver returned ${newDevice.address}"
+        }
+        registerDebugMessage("DEBUG", debug)
 
         _debugMessages.update { messages ->
             if(!messages.contains(debug)) messages + debug else messages}
@@ -80,7 +82,35 @@ class CustomBluetoothController private constructor(
     }
 
     @SuppressLint("MissingPermission")
+    private fun isMatchingParameters(device: BluetoothDevice, matchRegex: Boolean, matchUUID: Boolean) : Boolean{
+        var res = false
+        try {
+            if(hasPermissions(Manifest.permission.BLUETOOTH_CONNECT)){
+                if(matchRegex && matchUUID){
+                    if(device.name == null){
+                        res = device.address === SERVICE_UUID
+                    }
+                    else{
+                        res = regex.containsMatchIn(device.name) || device.address == SERVICE_UUID
+                    }
+                }
+                else if(matchRegex){
+                    res = if(device.name == null) false else regex.containsMatchIn(device.name)
+                }
+                else{
+                    res = device.address === SERVICE_UUID
+                }
+            }
+        }
+        catch (exc: IOException){
+            registerDebugMessage("ERROR","isMatchingParameters exception : ${exc.printStackTrace()}")
+        }
+        return res
+    }
+
+    @SuppressLint("MissingPermission")
     private val bluetoothReceiver = BluetoothReceiver { isConnected, device ->
+        var debug = ""
         if (isConnected) {
             _connectionState.value = ConnectionState.Connected
             _errorState.value = null
@@ -89,8 +119,7 @@ class CustomBluetoothController private constructor(
             _connectionState.value = ConnectionState.Disconnected
             debug = "Disconnected from device: ${device.name} / ${device.address}"
         }
-        Log.d("Debug",debug.toString())
-        registerDebugMessage(debug)
+        registerDebugMessage("DEBUG",debug)
     }
 
     init {
@@ -168,11 +197,10 @@ class CustomBluetoothController private constructor(
     }
 
     // Vérifie si la permission spécifiée est accordée
-    private fun hasPermissions(permission: String): Boolean {
-        debug = "hasPermission? for $permission"
-        registerDebugMessage(debug)
-        Log.d("DEBUG", debug)
-        return appContext.checkSelfPermission(permission) == PackageManager.PERMISSION_GRANTED
+    fun hasPermissions(permission: String): Boolean {
+        val temp = ActivityCompat.checkSelfPermission(appContext, permission) == PackageManager.PERMISSION_GRANTED
+        //registerDebugMessage("DEBUG","hasPermission? for ${permission.removePrefix("android.permission.")} = $temp")
+        return temp
     }
 
     private fun toUuid() : UUID{
@@ -181,9 +209,7 @@ class CustomBluetoothController private constructor(
 
     @SuppressLint("MissingPermission")
     private fun updatePairedDevices() {
-        debug = "updatePairedDevices called"
-        Log.d("DEBUG", debug)
-        registerDebugMessage(debug)
+        registerDebugMessage("DEBUG", "updatePairedDevices called")
         if (!hasPermissions(Manifest.permission.BLUETOOTH_CONNECT)) {
             return
         }
@@ -196,12 +222,23 @@ class CustomBluetoothController private constructor(
             appContext.unregisterReceiver(bluetoothReceiver)
         }
         catch (exc: IOException){
-            Log.d("DEBUG", "UnregisterReceiver failed, details:\n${exc.printStackTrace()}")
+            registerDebugMessage("ERROR", "UnregisterReceiver failed, details: ${exc.printStackTrace()}")
         }
     }
 
-    fun registerDebugMessage(debug : String){
-        _debugMessages.update { messages -> messages + debug }
+    fun registerDebugMessage(tag : String, mess : String){
+        when(tag){
+            "DEBUG" ->{
+                Log.d(tag, mess)
+            }
+            "ERROR"->{
+                Log.e(tag, mess)
+            }
+            "INFO"->{
+                Log.i(tag,mess)
+            }
+        }
+        _debugMessages.update { messages -> messages + mess }
     }
 
     // Singleton Pattern

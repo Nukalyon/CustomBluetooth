@@ -7,7 +7,6 @@ import android.content.Context
 import android.content.Intent
 import android.os.Build
 import android.os.Build.VERSION
-import android.util.Log
 import androidx.annotation.RequiresPermission
 
 class BluetoothDeviceReceiver (

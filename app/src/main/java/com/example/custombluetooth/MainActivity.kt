@@ -14,7 +14,6 @@ import android.content.IntentSender
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
-import android.util.Log
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -50,11 +49,11 @@ import com.example.custombluetooth.controller.CustomBluetoothController
 import com.example.custombluetooth.ui.theme.CustomBluetoothTheme
 import com.example.custombluetooth.view.BluetoothView
 import java.io.IOException
-import java.security.Permission
 import java.util.concurrent.Executor
 import java.util.regex.Pattern
 
 private const val SELECT_DEVICE_REQUEST_CODE = 0
+private const val SELECT_DEVICE_DISCOVERABLE = 2
 
 class MainActivity : ComponentActivity() {
 
@@ -77,7 +76,22 @@ class MainActivity : ComponentActivity() {
     var TIME_VISIBLE = 60
     val makeDeviceVisible = registerForActivityResult(
         ActivityResultContracts.StartActivityForResult()
-    ) {/* */ }
+    ) { result ->
+        when (result.resultCode) {
+            RESULT_OK -> {
+                addDebug("DEBUG", "makeDeviceVisible -> RESULT_OK")
+                val data = result.data
+                addDebug("DEBUG", "data = ${data.toString()}")
+            }
+            RESULT_CANCELED -> {
+                addDebug("DEBUG", "makeDeviceVisible -> RESULT_CANCELED")
+            }
+            else -> {
+                addDebug("ERROR", "makeDeviceVisible -> Unexpected result code: ${result.resultCode}")
+                addDebug("ERROR", "result = $result")
+            }
+        }
+    }
 
 
     @SuppressLint("ObsoleteSdkInt", "MissingPermission")
@@ -139,7 +153,7 @@ class MainActivity : ComponentActivity() {
                         Button(onClick = view::stopScan, modifier = Modifier.weight(1f)) {
                             Text("Stop Scan")
                         }
-                        Button(onClick = { launchAssociation() }, modifier = Modifier.weight(1f)) {
+                        Button(onClick = { view::startScan }, modifier = Modifier.weight(1f)) {
                             Text("Association")
                         }
 
@@ -217,12 +231,9 @@ class MainActivity : ComponentActivity() {
     }
 
     // https://stackoverflow.com/questions/77294327/androids-companiondevicemanager-associate-fails-to-find-any-device-when-filte
+
     @SuppressLint("MissingPermission")
     fun launchAssociation() {
-//        Log.d("DEBUG","Enter launchAssociation()")
-//        if (ContextCompat.checkSelfPermission(this, Manifest.permission.BLUETOOTH_SCAN) != PackageManager.PERMISSION_GRANTED) {
-//            Log.e("DEBUG", "Missing BLUETOOTH_SCAN permission")
-//        }
         // https://developer.android.com/develop/connectivity/bluetooth/companion-device-pairing?hl=fr
         val deviceFilter: BluetoothDeviceFilter = BluetoothDeviceFilter.Builder()
             .setNamePattern(Pattern.compile(".*"))
@@ -236,15 +247,14 @@ class MainActivity : ComponentActivity() {
             .build()
 
         try {
-            if(hasPermissions(Manifest.permission.BLUETOOTH_SCAN)){
+            if(Manifest.permission.BLUETOOTH_SCAN.hasPermissions()){
                 addDebug("DEBUG","isDicovering = ${bluetoothAdapter?.isDiscovering}")
             }
             if(hasPermissions(
                     listOf( Manifest.permission.BLUETOOTH_SCAN,
                             Manifest.permission.BLUETOOTH_CONNECT)
-            ) && bluetoothAdapter?.isDiscovering == true){
+            )){
                 addDebug("INFO","SDK IS ${Build.VERSION.SDK_INT}")
-
                 if (isSDKSupToVersion(Build.VERSION_CODES.TIRAMISU)) {
 
                     addDebug("DEBUG", "SDK IS >= UPSIDE_DOWN_CAKE")
@@ -257,10 +267,8 @@ class MainActivity : ComponentActivity() {
                                 val request = IntentSenderRequest.Builder(intentSender).build()
                                 addDebug("DEBUG", "AssociationLauncher start")
                                 associationLauncher.launch(request)
-
                             }
 
-                            @SuppressLint("MissingPermission")
                             override fun onAssociationCreated(associationInfo: AssociationInfo) {
                                 Toast.makeText(
                                     applicationContext,
@@ -324,9 +332,15 @@ class MainActivity : ComponentActivity() {
             else{
                 //Request visibility of the device
                 //if granted
-                val visibility = Intent(BluetoothAdapter.ACTION_REQUEST_DISCOVERABLE)
-                visibility.putExtra(BluetoothAdapter.EXTRA_DISCOVERABLE_DURATION, TIME_VISIBLE)
-                makeDeviceVisible.launch(visibility)
+                if(hasPermissions(listOf(
+                        Manifest.permission.BLUETOOTH_CONNECT,
+                        Manifest.permission.BLUETOOTH_SCAN
+                )) && bluetoothAdapter?.isEnabled == true){
+
+                    val visibility = Intent(BluetoothAdapter.ACTION_REQUEST_DISCOVERABLE)
+                        .putExtra(BluetoothAdapter.EXTRA_DISCOVERABLE_DURATION, TIME_VISIBLE)
+                    makeDeviceVisible.launch(visibility)
+                }
             }
         }
         catch (exc : IOException){
@@ -339,7 +353,7 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun hasPermissions(permission: List<String>): Boolean {
-        var res : Boolean = true
+        var res = true
         permission.forEach {
             perm ->
             val temp = ActivityCompat.checkSelfPermission(this, perm) == PackageManager.PERMISSION_GRANTED
@@ -351,23 +365,12 @@ class MainActivity : ComponentActivity() {
         return res
     }
 
-    private fun hasPermissions(permission: String): Boolean{
-        return ActivityCompat.checkSelfPermission(this, permission) == PackageManager.PERMISSION_GRANTED
+    private fun String.hasPermissions(): Boolean{
+        return this@MainActivity.controller.hasPermissions(this)
     }
 
     private fun addDebug(tag : String, mess : String){
-        when(tag){
-            "DEBUG" ->{
-                Log.d(tag, mess)
-            }
-            "ERROR"->{
-                Log.e(tag, mess)
-            }
-            "INFO"->{
-                Log.i(tag,mess)
-            }
-        }
-        controller.registerDebugMessage(mess)
+        controller.registerDebugMessage(tag, mess)
     }
 
 
