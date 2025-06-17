@@ -14,10 +14,16 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
 import androidx.compose.runtime.collectAsState
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
 import androidx.core.app.ActivityCompat
 import com.example.custombluetooth.controller.CustomBluetoothController
 import com.example.custombluetooth.model.AppState
@@ -119,7 +125,17 @@ class MainActivity : ComponentActivity() {
                             DeviceFoundScreen(state, controller::connectToDevice, view::stopScan)
                         }
                         AppState.Connecting -> {
-                            CircularProgressIndicator()
+                            Column(
+                            modifier = Modifier.fillMaxSize(),
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.Center
+                            ){
+                                CircularProgressIndicator()
+                                Text(text = "Connecting ...")
+                            }
+                        }
+                        AppState.Connected -> {
+                            Text(text = "Devices Connected")
                         }
                         else ->{
                             MainScreen(state, view)

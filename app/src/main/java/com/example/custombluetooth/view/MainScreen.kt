@@ -45,9 +45,9 @@ fun MainScreen(
         Button(onClick = view::stopScan, modifier = Modifier.weight(1f)) {
             Text("Stop Scan")
         }
-//        Button(onClick = { view::startScan }, modifier = Modifier.weight(1f)) {
-//            Text("Association")
-//        }
+        Button(onClick = view::startServer, modifier = Modifier.weight(1f)) {
+            Text("Start Server")
+        }
 
         Spacer(modifier = Modifier.weight(1f)) // Pushes log box to the bottom
 

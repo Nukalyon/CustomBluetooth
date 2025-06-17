@@ -69,6 +69,10 @@ class BluetoothView private constructor(
         controller.stopDiscovery()
     }
 
+    fun startServer(){
+        controller.startServer()
+    }
+
     override fun onCleared() {
         super.onCleared()
         controller.release()

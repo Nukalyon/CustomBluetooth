@@ -17,14 +17,12 @@ import com.example.custombluetooth.model.BluetoothReceiver
 import com.example.custombluetooth.model.ConnectDeviceThread
 import com.example.custombluetooth.model.AppState
 import com.example.custombluetooth.model.ServerListenThread
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import java.io.IOException
 import java.util.UUID
-import kotlin.time.Duration
 
 class CustomBluetoothController private constructor(
     private val appContext: Context
@@ -36,7 +34,6 @@ class CustomBluetoothController private constructor(
     private val adapter by lazy {
         manager?.adapter
     }
-    private val TIMEOUT = 5000f
 
     private val _scannedDevices = MutableStateFlow<List<BluetoothDevice>>(emptyList())
     private val _pairedDevices = MutableStateFlow<List<BluetoothDevice>>(emptyList())
@@ -63,34 +60,28 @@ class CustomBluetoothController private constructor(
         OR          // Match either regex or isSingleDevice condition
     }
     // Configurable filters
-    private val filterBySingleDevice = true
+    private val filterBySingleDevice = false
     private val filterByRegex = true
-    private val filterMode = FilterMode.AND
+    private val filterMode = FilterMode.OR
 
-    private val isSingleDevice = true
+    //private val isSingleDevice = true
     private val regex = "Tab".toRegex()
     @SuppressLint("MissingPermission")
     private val receiverDeviceFound = BluetoothDeviceReceiver { newDevice ->
 
-        var debug: String = ""
-
         // Evaluate conditions
-        val matchesSingleDevice = if (filterBySingleDevice) {
-            isSingleDevice && isMatchingParameters(newDevice, true, false)
-        } else {
-            false
-        }
         val matchesRegex = if (filterByRegex) {
             regex.containsMatchIn(newDevice.name ?: "")
         } else {
             false
         }
+
         val shouldAddDevice = when (filterMode) {
             FilterMode.NONE -> true  // add all devices
             FilterMode.AND -> {
                 // If filtering by both, device must satisfy both applicable filters
                 val conditions = mutableListOf<Boolean>()
-                if (filterBySingleDevice) conditions.add(matchesSingleDevice)
+                if (filterBySingleDevice) conditions.add(filterBySingleDevice)
                 if (filterByRegex) conditions.add(matchesRegex)
                 // AND all true, or if empty (no filters), true
                 conditions.all { it }
@@ -99,19 +90,21 @@ class CustomBluetoothController private constructor(
             FilterMode.OR -> {
                 // At least one condition true
                 val conditions = mutableListOf<Boolean>()
-                if (filterBySingleDevice) conditions.add(matchesSingleDevice)
+                if (filterBySingleDevice) conditions.add(filterBySingleDevice)
                 if (filterByRegex) conditions.add(matchesRegex)
                 // OR all, or if empty, true
                 if (conditions.isEmpty()) true else conditions.any { it }
             }
         }
+
         if (shouldAddDevice) {
             registerDebugMessage("DEBUG", "Adding device: $newDevice")
             _scannedDevices.update { devices ->
                 if (newDevice in devices) devices else devices + newDevice
             }
-            if (isSingleDevice && filterBySingleDevice) {
-                //stopDiscovery()
+            if (filterBySingleDevice) {
+                stopDiscovery()
+                connectToDevice(newDevice)
             }
         } else {
             registerDebugMessage(
@@ -121,8 +114,8 @@ class CustomBluetoothController private constructor(
         }
     }
 
-
-        @SuppressLint("MissingPermission")
+    /*
+    @SuppressLint("MissingPermission")
     private fun isMatchingParameters(device: BluetoothDevice, matchRegex: Boolean, matchUUID: Boolean) : Boolean{
         var res = false
         try {
@@ -147,7 +140,7 @@ class CustomBluetoothController private constructor(
             registerDebugMessage("ERROR","isMatchingParameters exception : ${exc.printStackTrace()}")
         }
         return res
-    }
+    }*/
 
     @SuppressLint("MissingPermission")
     private val bluetoothReceiver = BluetoothReceiver { isConnected, device ->
@@ -168,7 +161,7 @@ class CustomBluetoothController private constructor(
         val filter = IntentFilter().apply {
             addAction(BluetoothAdapter.ACTION_STATE_CHANGED)
             addAction(BluetoothDevice.ACTION_ACL_CONNECTED)
-            addAction(BluetoothDevice.ACTION_ACL_DISCONNECTED)
+            //addAction(BluetoothDevice.ACTION_ACL_DISCONNECTED)
         }
         appContext.registerReceiver(bluetoothReceiver, filter)
         appContext.registerReceiver(receiverDeviceFound, IntentFilter(BluetoothDevice.ACTION_FOUND))
@@ -201,6 +194,7 @@ class CustomBluetoothController private constructor(
     override fun startServer() {
         try {
             if (hasPermissions(Manifest.permission.BLUETOOTH_CONNECT)) {
+                registerDebugMessage("DEBUG","Starting Server ...")
                 val thread = ServerListenThread(adapter, NAME_SERVER, toUuid())
                 thread.start()
             }else {
