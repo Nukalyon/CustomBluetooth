@@ -1,19 +1,13 @@
 package com.example.custombluetooth.model
 
-sealed class ScanState {
-    object Idle : ScanState()
-    object Scanning : ScanState()
-    object Connecting : ScanState()
-    object Disconnecting : ScanState()
-    data class Error(val message: String) : ScanState()
-}
-
-// Connection states for device connection lifecycle
-sealed class ConnectionState {
-    object Disconnected : ConnectionState()
-    object Connecting : ConnectionState()
-    object Connected : ConnectionState()
-    data class Failed(val reason: String) : ConnectionState()
+sealed class AppState {
+    object Idle : AppState()
+    object Scanning : AppState()
+    object Connecting : AppState()
+    object Connected : AppState()
+    object Disconnecting : AppState()
+    object Disconnected : AppState()
+    data class Error(val message: String) : AppState()
 }
 
 // Bluetooth error types

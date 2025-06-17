@@ -26,7 +26,9 @@ class BluetoothDeviceReceiver (
                         intent.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE)
                     }
                 device?.let {
-                    onDeviceFound(device)
+                    if(device.name != null){
+                        onDeviceFound(device)
+                    }
                 }
             }
         }

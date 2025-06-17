@@ -1,11 +1,8 @@
 package com.example.custombluetooth.view
 
-import android.bluetooth.BluetoothDevice
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.custombluetooth.controller.CustomBluetoothController
-import com.example.custombluetooth.model.BluetoothError
-import com.example.custombluetooth.model.ConnectionState
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.launchIn
@@ -29,7 +26,7 @@ class BluetoothView private constructor(
     // StateFlow for managing the UI state
     private val _scannedDevices = controller.scannedDevices
     private val _pairedDevices = controller.pairedDevices
-    private val _connectionState = controller.connectionState
+    private val _appState = controller.appState
     private val _errorState = controller.errorState
     private val _debugMessages = controller.debugMessages
 
@@ -37,15 +34,16 @@ class BluetoothView private constructor(
     val state = combine(
         _scannedDevices,
         _pairedDevices,
-        _connectionState,
+        _appState,
         _errorState,
         _debugMessages
-    ) { scannedDevices, pairedDevices, connectionState, error , debug->
+    ) { scannedDevices, pairedDevices, appState, error, debug->
         // Create a UI state object or a simple data structure to hold the combined state
         UIState(
             scannedDevices = scannedDevices,
             bondedDevices = pairedDevices,
-            connectionState = connectionState,
+            //scanState = scanState,
+            appState = appState,
             errorDesc = error,
             debugMessages = debug
         )
@@ -58,7 +56,7 @@ class BluetoothView private constructor(
         }.launchIn(viewModelScope)
 
         // Listen for connection state changes if needed
-        _connectionState.onEach { connectionState ->
+        _appState.onEach { state ->
             // Handle connection state updates if needed
         }.launchIn(viewModelScope)
     }
@@ -76,12 +74,3 @@ class BluetoothView private constructor(
         controller.release()
     }
 }
-
-// Define a simple UI state data class to hold the combined state
-data class UIState(
-    val scannedDevices: List<BluetoothDevice> = emptyList(),
-    val bondedDevices: List<BluetoothDevice> = emptyList(),
-    val connectionState: ConnectionState = ConnectionState.Disconnected,
-    val errorDesc: BluetoothError? = null,
-    val debugMessages : List<String> = emptyList()
-)

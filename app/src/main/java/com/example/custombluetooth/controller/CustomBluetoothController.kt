@@ -15,15 +15,16 @@ import com.example.custombluetooth.model.BluetoothDeviceReceiver
 import com.example.custombluetooth.model.BluetoothError
 import com.example.custombluetooth.model.BluetoothReceiver
 import com.example.custombluetooth.model.ConnectDeviceThread
-import com.example.custombluetooth.model.ConnectionState
-import com.example.custombluetooth.model.ScanState
+import com.example.custombluetooth.model.AppState
 import com.example.custombluetooth.model.ServerListenThread
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import java.io.IOException
 import java.util.UUID
+import kotlin.time.Duration
 
 class CustomBluetoothController private constructor(
     private val appContext: Context
@@ -35,11 +36,11 @@ class CustomBluetoothController private constructor(
     private val adapter by lazy {
         manager?.adapter
     }
+    private val TIMEOUT = 5000f
 
     private val _scannedDevices = MutableStateFlow<List<BluetoothDevice>>(emptyList())
     private val _pairedDevices = MutableStateFlow<List<BluetoothDevice>>(emptyList())
-    private val _scanState = MutableStateFlow<ScanState>(ScanState.Idle)
-    private val _connectionState = MutableStateFlow<ConnectionState>(ConnectionState.Disconnected)
+    private val _appState = MutableStateFlow<AppState>(AppState.Idle)
     private val _errorState = MutableStateFlow<BluetoothError?>(null)
     private val _debugMessages = MutableStateFlow<List<String>>(emptyList())
 
@@ -47,41 +48,81 @@ class CustomBluetoothController private constructor(
         get() = _scannedDevices.asStateFlow()
     override val pairedDevices: StateFlow<List<BluetoothDevice>>
         get() = _pairedDevices.asStateFlow()
-    override val scanState: StateFlow<ScanState>
-        get() = _scanState.asStateFlow()
-    override val connectionState: StateFlow<ConnectionState>
-        get() = _connectionState.asStateFlow()
+    override val appState: StateFlow<AppState>
+        get() = _appState.asStateFlow()
     override val errorState: StateFlow<BluetoothError?>
         get() = _errorState.asStateFlow()
     override val debugMessages: StateFlow<List<String>>
         get() = _debugMessages.asStateFlow()
 
-    private val isSingleDevice = true
-    private val regex = "Fea".toRegex()
-    @SuppressLint("MissingPermission")
-    private val receiverDeviceFound = BluetoothDeviceReceiver{
-        newDevice ->
-        if(isSingleDevice == true && isMatchingParameters(newDevice, true, false)){
-            registerDebugMessage("DEBUG","Device is matching parameters : = $newDevice")
-            stopDiscovery()
-        }
-        var debug :String
-        if(hasPermissions(Manifest.permission.BLUETOOTH_CONNECT)){
-            debug = "FoundDeviceReceiver returned ${newDevice.name}"
-        }
-        else{
-            debug = "FoundDeviceReceiver returned ${newDevice.address}"
-        }
-        registerDebugMessage("DEBUG", debug)
 
-        _debugMessages.update { messages ->
-            if(!messages.contains(debug)) messages + debug else messages}
-        _scannedDevices.update{   devices ->
-            if(newDevice in devices) devices else devices + newDevice
+    // New config: filter modes
+    enum class FilterMode {
+        NONE,       // No filtering — add all devices
+        AND,        // Match both regex and isSingleDevice condition
+        OR          // Match either regex or isSingleDevice condition
+    }
+    // Configurable filters
+    private val filterBySingleDevice = true
+    private val filterByRegex = true
+    private val filterMode = FilterMode.AND
+
+    private val isSingleDevice = true
+    private val regex = "Tab".toRegex()
+    @SuppressLint("MissingPermission")
+    private val receiverDeviceFound = BluetoothDeviceReceiver { newDevice ->
+
+        var debug: String = ""
+
+        // Evaluate conditions
+        val matchesSingleDevice = if (filterBySingleDevice) {
+            isSingleDevice && isMatchingParameters(newDevice, true, false)
+        } else {
+            false
+        }
+        val matchesRegex = if (filterByRegex) {
+            regex.containsMatchIn(newDevice.name ?: "")
+        } else {
+            false
+        }
+        val shouldAddDevice = when (filterMode) {
+            FilterMode.NONE -> true  // add all devices
+            FilterMode.AND -> {
+                // If filtering by both, device must satisfy both applicable filters
+                val conditions = mutableListOf<Boolean>()
+                if (filterBySingleDevice) conditions.add(matchesSingleDevice)
+                if (filterByRegex) conditions.add(matchesRegex)
+                // AND all true, or if empty (no filters), true
+                conditions.all { it }
+            }
+
+            FilterMode.OR -> {
+                // At least one condition true
+                val conditions = mutableListOf<Boolean>()
+                if (filterBySingleDevice) conditions.add(matchesSingleDevice)
+                if (filterByRegex) conditions.add(matchesRegex)
+                // OR all, or if empty, true
+                if (conditions.isEmpty()) true else conditions.any { it }
+            }
+        }
+        if (shouldAddDevice) {
+            registerDebugMessage("DEBUG", "Adding device: $newDevice")
+            _scannedDevices.update { devices ->
+                if (newDevice in devices) devices else devices + newDevice
+            }
+            if (isSingleDevice && filterBySingleDevice) {
+                //stopDiscovery()
+            }
+        } else {
+            registerDebugMessage(
+                "DEBUG",
+                "Ignoring device (filtered out): ${newDevice.name ?: newDevice.address}"
+            )
         }
     }
 
-    @SuppressLint("MissingPermission")
+
+        @SuppressLint("MissingPermission")
     private fun isMatchingParameters(device: BluetoothDevice, matchRegex: Boolean, matchUUID: Boolean) : Boolean{
         var res = false
         try {
@@ -112,11 +153,11 @@ class CustomBluetoothController private constructor(
     private val bluetoothReceiver = BluetoothReceiver { isConnected, device ->
         var debug = ""
         if (isConnected) {
-            _connectionState.value = ConnectionState.Connected
+            _appState.value = AppState.Connected
             _errorState.value = null
             debug = "Connected to device: ${device.name} / ${device.address}"
         } else {
-            _connectionState.value = ConnectionState.Disconnected
+            _appState.value = AppState.Disconnected
             debug = "Disconnected from device: ${device.name} / ${device.address}"
         }
         registerDebugMessage("DEBUG",debug)
@@ -138,7 +179,7 @@ class CustomBluetoothController private constructor(
     override fun startDiscovery() {
         if (hasPermissions(Manifest.permission.BLUETOOTH_SCAN)) {
             _errorState.value = null
-            _scanState.value = ScanState.Scanning
+            _appState.value = AppState.Scanning
 
             updatePairedDevices()
             adapter?.startDiscovery()
@@ -150,8 +191,10 @@ class CustomBluetoothController private constructor(
     @SuppressLint("MissingPermission")
     override fun stopDiscovery() {
         if (hasPermissions(Manifest.permission.BLUETOOTH_SCAN)) {
-            _scanState.value = ScanState.Idle
+            _appState.value = AppState.Idle
             adapter?.cancelDiscovery()
+        }else {
+            _errorState.value = BluetoothError.PermissionDenied
         }
     }
 
@@ -160,9 +203,11 @@ class CustomBluetoothController private constructor(
             if (hasPermissions(Manifest.permission.BLUETOOTH_CONNECT)) {
                 val thread = ServerListenThread(adapter, NAME_SERVER, toUuid())
                 thread.start()
+            }else {
+                _errorState.value = BluetoothError.PermissionDenied
             }
         } catch (exc: IOException) {
-            Log.d("DEBUG", "Exception caught, details:\n${exc.printStackTrace()}")
+            registerDebugMessage("ERROR", "Exception caught, details:\n${exc.printStackTrace()}")
         }
     }
 
@@ -172,13 +217,17 @@ class CustomBluetoothController private constructor(
     @RequiresPermission(Manifest.permission.BLUETOOTH_CONNECT)
     override fun connectToDevice(device: BluetoothDevice) {
         try {
-            _connectionState.value = ConnectionState.Connecting
-            val thread = ConnectDeviceThread(adapter, toUuid(), device, this) // Pass listener
-            connectThread = thread
-            thread.start()
+            if (hasPermissions(Manifest.permission.BLUETOOTH_CONNECT)) {
+                _appState.value = AppState.Connecting
+                val thread = ConnectDeviceThread(adapter, toUuid(), device, this) // Pass listener
+                connectThread = thread
+                thread.start()
+            }else{
+                _errorState.value = BluetoothError.PermissionDenied
+            }
         } catch (exc: IOException) {
-            Log.d("DEBUG", "Connect method failed, details:\n${exc.printStackTrace()}")
-            _connectionState.value = ConnectionState.Failed("Connection failed: ${exc.message}")
+            registerDebugMessage("ERROR", "Connect method failed, details:\n${exc.printStackTrace()}")
+            _appState.value = AppState.Error("Connection failed: ${exc.message}")
         }
     }
 
@@ -189,7 +238,7 @@ class CustomBluetoothController private constructor(
     }
 
     override fun disconnectFromDevice() {
-        _scanState.value = ScanState.Disconnecting
+        _appState.value = AppState.Disconnecting
     }
 
     override fun sendMessage(message: String) {
@@ -238,7 +287,7 @@ class CustomBluetoothController private constructor(
                 Log.i(tag,mess)
             }
         }
-        _debugMessages.update { messages -> messages + mess }
+        _debugMessages.update { messages ->  if(!messages.contains(mess)) messages + mess else messages }
     }
 
     // Singleton Pattern
@@ -247,8 +296,8 @@ class CustomBluetoothController private constructor(
         private var instance: CustomBluetoothController ?= null
         const val SERVICE_UUID = "9a2437a0-f4d5-4a64-8abf-3e3c45ad0293"
         const val NAME_SERVER = "link_arduino"
-        const val ARDUINO_NAME = "FeatherBlue"  //by name or address ?
-        const val TABLETTE = "Yannick"  //by name or address ?
+        const val ARDUINO_NAME = "FeatherBlue"
+        const val TABLETTE = "Yannick"
 
         fun getInstance(context: Context) : CustomBluetoothController{
             return instance?:synchronized(this) {
