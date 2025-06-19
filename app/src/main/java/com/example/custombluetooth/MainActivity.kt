@@ -31,6 +31,7 @@ import com.example.custombluetooth.ui.theme.CustomBluetoothTheme
 import com.example.custombluetooth.view.BluetoothView
 import com.example.custombluetooth.view.DeviceFoundScreen
 import com.example.custombluetooth.view.MainScreen
+import androidx.compose.material3.Button
 
 private const val SELECT_DEVICE_REQUEST_CODE = 0
 private const val SELECT_DEVICE_DISCOVERABLE = 2
@@ -135,7 +136,16 @@ class MainActivity : ComponentActivity() {
                             }
                         }
                         AppState.Connected -> {
-                            Text(text = "Devices Connected")
+                            Column(
+                                modifier = Modifier.fillMaxSize(),
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                verticalArrangement = Arrangement.Center
+                            ){
+                                Text(text = "Devices Connected")
+                                Button(onClick = { controller.sendMessage("1234abcd") }){
+                                    Text(text = "Simple message")
+                                }
+                            }
                         }
                         else ->{
                             MainScreen(state, view)

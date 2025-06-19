@@ -52,6 +52,8 @@ class CustomBluetoothController private constructor(
     override val debugMessages: StateFlow<List<String>>
         get() = _debugMessages.asStateFlow()
 
+    var dataTransferService : DataTransferService ?= null
+
 
     // New config: filter modes
     enum class FilterMode {
@@ -65,7 +67,7 @@ class CustomBluetoothController private constructor(
     private val filterMode = FilterMode.OR
 
     //private val isSingleDevice = true
-    private val regex = "Tab".toRegex()
+    private val regex = "[a-zA-Z0-9]*".toRegex()
     @SuppressLint("MissingPermission")
     private val receiverDeviceFound = BluetoothDeviceReceiver { newDevice ->
 
@@ -186,6 +188,7 @@ class CustomBluetoothController private constructor(
         if (hasPermissions(Manifest.permission.BLUETOOTH_SCAN)) {
             _appState.value = AppState.Idle
             adapter?.cancelDiscovery()
+            _scannedDevices.value = emptyList()
         }else {
             _errorState.value = BluetoothError.PermissionDenied
         }
@@ -195,7 +198,7 @@ class CustomBluetoothController private constructor(
         try {
             if (hasPermissions(Manifest.permission.BLUETOOTH_CONNECT)) {
                 registerDebugMessage("DEBUG","Starting Server ...")
-                val thread = ServerListenThread(adapter, NAME_SERVER, toUuid())
+                val thread = ServerListenThread(adapter, NAME_SERVER, toUuid(), this, this)
                 thread.start()
             }else {
                 _errorState.value = BluetoothError.PermissionDenied
@@ -213,7 +216,7 @@ class CustomBluetoothController private constructor(
         try {
             if (hasPermissions(Manifest.permission.BLUETOOTH_CONNECT)) {
                 _appState.value = AppState.Connecting
-                val thread = ConnectDeviceThread(adapter, toUuid(), device, this) // Pass listener
+                val thread = ConnectDeviceThread(adapter, toUuid(), device, this, this) // Pass listener
                 connectThread = thread
                 thread.start()
             }else{
@@ -227,8 +230,7 @@ class CustomBluetoothController private constructor(
 
     override fun onMessageReceived(message: String) {
         // Handle the received message (update UI, notify user, etc.)
-        Log.d("DEBUG", "Message received: $message")
-        // You can also update a StateFlow or notify the UI here
+        registerDebugMessage("DEBUG","Message received: $message")
     }
 
     override fun disconnectFromDevice() {
@@ -236,7 +238,12 @@ class CustomBluetoothController private constructor(
     }
 
     override fun sendMessage(message: String) {
-        TODO("Not yet implemented")
+        dataTransferService?.let {
+            it.write(message.toByteArray())
+            registerDebugMessage("DEBUG","$message is sent")
+        }?: run {
+            registerDebugMessage("DEBUG","dataTransferService isn't initialized")
+        }
     }
 
     // Vérifie si la permission spécifiée est accordée

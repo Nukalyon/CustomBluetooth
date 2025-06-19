@@ -5,6 +5,8 @@ import android.bluetooth.BluetoothAdapter
 import android.bluetooth.BluetoothServerSocket
 import android.bluetooth.BluetoothSocket
 import android.util.Log
+import com.example.custombluetooth.controller.CustomBluetoothController
+import com.example.custombluetooth.controller.DataTransferService
 import java.io.IOException
 import java.util.UUID
 
@@ -12,7 +14,9 @@ import java.util.UUID
 class ServerListenThread(
     private val adapter: BluetoothAdapter?,
     private val serverName: String,
-    private val uuid: UUID?
+    private val uuid: UUID?,
+    private val messageListener: DataTransferService.MessageListener,
+    private val controller : CustomBluetoothController
 ) : Thread() {
 
     private val serverSocket : BluetoothServerSocket? by lazy(LazyThreadSafetyMode.NONE){
@@ -31,7 +35,9 @@ class ServerListenThread(
                 null
             }
             socket?.also {
-                //manageMyConnectedSocket(it)
+                val dataTransferService = DataTransferService(socket, messageListener)
+                controller.dataTransferService = dataTransferService
+                dataTransferService.start()
                 serverSocket?.close()
                 shouldLoop = false
             }

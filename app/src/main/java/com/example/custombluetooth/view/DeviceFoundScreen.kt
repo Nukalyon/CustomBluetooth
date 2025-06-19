@@ -116,7 +116,7 @@ private fun DeviceListItem(
                 text = device.name?.takeIf { it.isNotBlank() } ?: "no name",
                 style = MaterialTheme.typography.titleMedium.copy(
                     fontWeight = FontWeight.SemiBold,
-                    color = Color.Black
+                    color = Color.White
                 ),
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
