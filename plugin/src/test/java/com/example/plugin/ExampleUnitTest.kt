@@ -1,4 +1,4 @@
-package com.example.bluetoothconnect
+package com.example.plugin
 
 import org.junit.Test
 

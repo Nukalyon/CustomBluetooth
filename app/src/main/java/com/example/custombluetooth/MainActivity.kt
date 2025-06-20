@@ -17,6 +17,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -31,7 +32,6 @@ import com.example.custombluetooth.ui.theme.CustomBluetoothTheme
 import com.example.custombluetooth.view.BluetoothView
 import com.example.custombluetooth.view.DeviceFoundScreen
 import com.example.custombluetooth.view.MainScreen
-import androidx.compose.material3.Button
 
 private const val SELECT_DEVICE_REQUEST_CODE = 0
 private const val SELECT_DEVICE_DISCOVERABLE = 2

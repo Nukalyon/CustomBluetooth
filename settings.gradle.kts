@@ -21,4 +21,4 @@ dependencyResolutionManagement {
 
 rootProject.name = "CustomBluetooth"
 include(":app")
-include(":bluetoothConnect")
+include(":plugin")
