@@ -1,7 +1,7 @@
 package com.example.plugin
 
 import android.content.Context
-import com.unity3d.player.UnityPlayer
+import com.unity3d.player.MyUnityPlayer
 
 
 // https://docs.unity3d.com/6000.1/Documentation/Manual/android-plugins-java-code-from-c-sharp.html
@@ -12,6 +12,11 @@ object BluetoothUnityBridge {
     @JvmStatic
     fun init(context: Context) {
         plugin = KotlinBluetoothPlugin(context)
+    }
+
+    @JvmStatic
+    fun isinit(): Boolean {
+        return plugin != null
     }
 
     @JvmStatic
@@ -36,6 +41,6 @@ object BluetoothUnityBridge {
 
     @JvmStatic
     fun notifyUnity(message: String) {
-        UnityPlayer.UnitySendMessage("BluetoothReceiver", "OnMessageArrived", message)
+        MyUnityPlayer.UnitySendMessage("BluetoothReceiver", "OnMessageArrived", message)
     }
 }

@@ -2,7 +2,7 @@ package com.unity3d.player
 
 import android.content.Context
 
-object UnityPlayer {
+object MyUnityPlayer {
     @JvmStatic
     fun UnitySendMessage(gameObject: String, methodName: String, message: String) {
         println("Message simulé vers Unity : $gameObject -> $methodName('$message')")
