@@ -34,6 +34,9 @@ class CustomBluetoothController private constructor(
     private val adapter by lazy {
         manager?.adapter
     }
+    internal val isBluetoothEnabled : Boolean
+        get() = adapter?.isEnabled == true
+
 
     private val _scannedDevices = MutableStateFlow<List<BluetoothDevice>>(emptyList())
     private val _pairedDevices = MutableStateFlow<List<BluetoothDevice>>(emptyList())
@@ -55,66 +58,26 @@ class CustomBluetoothController private constructor(
     var dataTransferService : DataTransferService ?= null
 
 
-    // New config: filter modes
-    enum class FilterMode {
-        NONE,       // No filtering — add all devices
-        AND,        // Match both regex and isSingleDevice condition
-        OR          // Match either regex or isSingleDevice condition
-    }
-    // Configurable filters
-    private val filterBySingleDevice = false
-    private val filterByRegex = true
-    private val filterMode = FilterMode.OR
+    internal var regex : Regex = "[A-Za-z0-9]*".toRegex()
+        get() = field
+        set(value) { field = value }
 
-    //private val isSingleDevice = true
-    private val regex = "[a-zA-Z0-9]*".toRegex()
     @SuppressLint("MissingPermission")
     private val receiverDeviceFound = BluetoothDeviceReceiver { newDevice ->
-
-        // Evaluate conditions
-        val matchesRegex = if (filterByRegex) {
-            regex.containsMatchIn(newDevice.name ?: "")
-        } else {
-            false
-        }
-
-        val shouldAddDevice = when (filterMode) {
-            FilterMode.NONE -> true  // add all devices
-            FilterMode.AND -> {
-                // If filtering by both, device must satisfy both applicable filters
-                val conditions = mutableListOf<Boolean>()
-                if (filterBySingleDevice) conditions.add(filterBySingleDevice)
-                if (filterByRegex) conditions.add(matchesRegex)
-                // AND all true, or if empty (no filters), true
-                conditions.all { it }
-            }
-
-            FilterMode.OR -> {
-                // At least one condition true
-                val conditions = mutableListOf<Boolean>()
-                if (filterBySingleDevice) conditions.add(filterBySingleDevice)
-                if (filterByRegex) conditions.add(matchesRegex)
-                // OR all, or if empty, true
-                if (conditions.isEmpty()) true else conditions.any { it }
-            }
-        }
-
-        if (shouldAddDevice) {
-            registerDebugMessage("DEBUG", "Adding device: $newDevice")
+        if(regex.containsMatchIn(newDevice.name ?: "")){
             _scannedDevices.update { devices ->
                 if (newDevice in devices) devices else devices + newDevice
             }
-            if (filterBySingleDevice) {
-                stopDiscovery()
-                connectToDevice(newDevice)
-            }
-        } else {
+        }
+        else{
             registerDebugMessage(
                 "DEBUG",
                 "Ignoring device (filtered out): ${newDevice.name ?: newDevice.address}"
             )
         }
     }
+
+
 
     /*
     @SuppressLint("MissingPermission")
