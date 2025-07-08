@@ -69,8 +69,12 @@ class MyUnityPlayer : UnityPlayerActivity(){
         }
 
         @JvmStatic
-        fun setRegex(regexString: String?){
-            controller.regex = regexString?.toRegex()!!
+        fun setRegex(regexString: String){
+            if(regexString.isBlank()){
+                controller.regex = ".*".toRegex()
+                return
+            }
+            controller.regex = regexString.toRegex()
         }
 
         @JvmStatic
