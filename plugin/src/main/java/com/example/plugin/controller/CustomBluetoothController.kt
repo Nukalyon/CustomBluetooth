@@ -3,19 +3,24 @@ package com.example.plugin.controller
 import android.Manifest
 import android.annotation.SuppressLint
 import android.bluetooth.BluetoothAdapter
+import android.bluetooth.BluetoothClass
 import android.bluetooth.BluetoothDevice
 import android.bluetooth.BluetoothManager
 import android.content.Context
 import android.content.IntentFilter
 import android.content.pm.PackageManager
 import android.util.Log
+import android.widget.Toast
 import androidx.annotation.RequiresPermission
 import androidx.core.app.ActivityCompat
+import com.example.plugin.MyUnityPlayer
 import com.example.plugin.model.AppState
 import com.example.plugin.model.BluetoothDeviceReceiver
 import com.example.plugin.model.BluetoothError
 import com.example.plugin.model.BluetoothReceiver
 import com.example.plugin.model.ConnectDeviceThread
+import com.example.plugin.model.CustomBluetoothDevice
+import com.example.plugin.model.CustomBluetoothDeviceMapper
 import com.example.plugin.model.ServerListenThread
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -36,6 +41,10 @@ class CustomBluetoothController private constructor(
     }
     internal val isBluetoothEnabled : Boolean
         get() = adapter?.isEnabled == true
+
+    internal val isDeviceVisible : Boolean
+        @RequiresPermission(Manifest.permission.BLUETOOTH_SCAN)
+        get() = adapter?.scanMode == BluetoothAdapter.SCAN_MODE_CONNECTABLE_DISCOVERABLE
 
 
     private val _scannedDevices = MutableStateFlow<List<BluetoothDevice>>(emptyList())
@@ -250,8 +259,42 @@ class CustomBluetoothController private constructor(
             "INFO"->{
                 Log.i(tag,mess)
             }
+            "Unity"->{
+                Log.d(tag,mess)
+            }
         }
         _debugMessages.update { messages ->  if(!messages.contains(mess)) messages + mess else messages }
+    }
+
+    @SuppressLint("MissingPermission")
+    fun getPairedDevicesAsString(): String {
+        registerDebugMessage("Unity", "hasPermissions(Manifest.permission.BLUETOOTH_CONNECT) = " + hasPermissions(Manifest.permission.BLUETOOTH_CONNECT))
+        if (!hasPermissions(Manifest.permission.BLUETOOTH_CONNECT)) {
+            return "[]" // Return empty array JSON string if no permissions
+        }
+        try {
+            val bondedDevices = adapter?.bondedDevices.orEmpty()
+            registerDebugMessage("Unity", "bonded list size = " + bondedDevices.size)
+            val customDevices = bondedDevices.map { bluetoothDevice ->
+                CustomBluetoothDevice(
+                    name = bluetoothDevice.name,
+                    address = bluetoothDevice.address,
+                    deviceType = when (bluetoothDevice.bluetoothClass.majorDeviceClass) {
+                        BluetoothClass.Device.Major.AUDIO_VIDEO -> CustomBluetoothDevice.DeviceType.AUDIO
+                        BluetoothClass.Device.Major.COMPUTER -> CustomBluetoothDevice.DeviceType.COMPUTER
+                        BluetoothClass.Device.Major.PHONE -> CustomBluetoothDevice.DeviceType.PHONE
+                        else -> CustomBluetoothDevice.DeviceType.UNKNOWN
+                    },
+                    rssi = null // RSSI not available for bonded devices
+                )
+            }
+            // Return JSON string of all paired devices
+            return CustomBluetoothDeviceMapper().encodeMultipleToJson(customDevices)
+        } catch (e: Exception) {
+            registerDebugMessage("ERROR", "Failed to update paired devices: ${e.message}")
+            registerDebugMessage("Unity", "Failed to update paired devices: ${e.message}")
+            return "[]" // Return empty array JSON string on error
+        }
     }
 
     // Singleton Pattern

@@ -34,19 +34,22 @@ class BluetoothPermissionManager(private val context: Context) {
         } == true
     }
 
-    fun requestBluetoothPermissions(activity: Activity) {
+    fun requestBluetoothPermissions(activity: Activity?) {
         val neededPermissions = BLUETOOTH_PERMISSIONS?.filter {
             ContextCompat.checkSelfPermission(context, it) != PackageManager.PERMISSION_GRANTED
         }?.toTypedArray()
 
         neededPermissions?.let {
             if (it.isNotEmpty()) {
-                ActivityCompat.requestPermissions(
-                    activity,
-                    neededPermissions,
-                    REQUEST_CODE_BLUETOOTH
-                )
+                activity?.let{
+                    ActivityCompat.requestPermissions(
+                        activity,
+                        neededPermissions,
+                        REQUEST_CODE_BLUETOOTH
+                    )
+                }
             }
+
         }
     }
 

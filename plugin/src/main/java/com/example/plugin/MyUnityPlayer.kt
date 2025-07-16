@@ -4,6 +4,7 @@ import android.Manifest
 import android.app.Activity
 import android.bluetooth.BluetoothDevice
 import android.os.Bundle
+import android.util.Log
 import android.widget.Toast
 import androidx.annotation.RequiresPermission
 import com.example.plugin.controller.CustomBluetoothController
@@ -20,71 +21,132 @@ class MyUnityPlayer : UnityPlayerActivity(){
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        Toast.makeText(UnityPlayer.currentActivity, "PluginActivity -> onCreate", Toast.LENGTH_LONG).show()
+
+        // Simple debug feedback
+        UnityPlayer.currentActivity?.let {
+            Toast.makeText(it, "PluginActivity -> onCreate", Toast.LENGTH_LONG).show()
+        }
+
+        // Safely initialize Bluetooth controller after Unity activity is available
+        controller = CustomBluetoothController.getInstance(
+            requireNotNull(UnityPlayer.currentActivity) { "Unity activity is null" }
+        )
+
+        permissionManager = BluetoothPermissionManager(
+            requireNotNull(UnityPlayer.currentActivity) { "Unity activity is null" }
+        )
+
+        permissionManager?.let {
+            if(!it.checkAllPermissionsGranted()){
+                it.requestBluetoothPermissions(UnityPlayer.currentActivity)
+            }
+        }
+    }
+
+    override fun onRequestPermissionsResult(
+        requestCode: Int,
+        permissions: Array<out String?>,
+        grantResults: IntArray,
+        deviceId: Int
+    ) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults, deviceId)
+        permissionManager?.onRequestPermissionsResult(requestCode, grantResults) { allGranted ->
+            if (allGranted) {
+                // Permissions granted, proceed with Bluetooth operations
+                Log.d("INFO", "Bluetooth permissions granted")
+                showToast("Bluetooth permissions granted")
+            } else {
+                // Handle the case where permissions are not granted
+                Log.d("INFO", "Bluetooth permissions not granted")
+                showToast("Bluetooth permissions are required to access paired devices.")
+            }
+        }
     }
 
     companion object {
-        private val controller = CustomBluetoothController.getInstance((UnityPlayer.currentActivity))
+        // Controller reference used for Bluetooth actions
+        private var controller: CustomBluetoothController? = null
+        private var permissionManager : BluetoothPermissionManager ?= null
 
-        fun UnitySendMessage(gameObject: String, methodName: String, message: String) {
-            println("Message simulé vers Unity : $gameObject -> $methodName('$message')")
+        // Simulated Unity messaging for debug
+        @JvmStatic
+        fun unitySendMessage(gameObject: String, methodName: String, message: String) {
+            println("Message sent to Unity: $gameObject -> $methodName('$message')")
         }
 
+        // Display a message to the user via Android Toast
         @JvmStatic
-        fun getActivity(): Activity? {
-            return UnityPlayer.currentActivity
-        }
-
-        @JvmStatic
-        fun showToast(msg: String){
+        fun showToast(msg: String) {
             Toast.makeText(UnityPlayer.currentActivity, msg, Toast.LENGTH_LONG).show()
         }
 
+        // Starts Bluetooth scan
         @JvmStatic
         fun startScan() {
-            controller.startDiscovery()
+            controller?.startDiscovery()
         }
 
+        // Stops Bluetooth scan
         @JvmStatic
         fun stopScan() {
-            controller.stopDiscovery()
+            controller?.stopDiscovery()
         }
 
+        // Initiates connection to a specific Bluetooth device
         @JvmStatic
         @RequiresPermission(Manifest.permission.BLUETOOTH_CONNECT)
         fun connectToDevice(device: BluetoothDevice) {
-            controller.connectToDevice(device)
+            controller?.connectToDevice(device)
         }
 
+        // Disconnects from the current Bluetooth device
         @JvmStatic
         fun disconnect() {
-            controller.disconnectFromDevice()
+            controller?.disconnectFromDevice()
         }
 
+        // Sends a message over Bluetooth, using a background coroutine
         @JvmStatic
         fun sendMessage(message: String?) {
             CoroutineScope(Dispatchers.IO).launch {
-                controller.sendMessage(message.toString())
+                controller?.sendMessage(message.orEmpty())
             }
         }
 
+        // Sets the regex filter for Bluetooth device names
         @JvmStatic
-        fun setRegex(regexString: String){
-            if(regexString.isBlank()){
-                controller.regex = ".*".toRegex()
-                return
-            }
-            controller.regex = regexString.toRegex()
+        fun setRegex(regexString: String) {
+            controller?.regex = if (regexString.isBlank()) ".*".toRegex() else regexString.toRegex()
         }
 
+        // Retrieves the current regex pattern as a string
         @JvmStatic
-        fun getRegex(): String {
-            return controller.regex.toString()
-        }
+        fun getRegex(): String = controller?.regex.toString()
+
+        // Checks if Bluetooth is currently enabled
+        @JvmStatic
+        fun getBluetoothStatus(): Boolean = controller?.isBluetoothEnabled == true
 
         @JvmStatic
-        fun getBluetoothStatus(): Boolean {
-            return controller.isBluetoothEnabled
+        fun isDeviceVisible() : Boolean = controller?.isDeviceVisible == true
+
+        // Called from Unity to retrieve paired devices
+        @JvmStatic
+        fun getPairedDevices() {
+            Log.d("Unity","getPairedDevices called")
+            showToast("getPairedDevices called")
+            sendListToUnity(controller?.getPairedDevicesAsString().toString())
         }
+
+        // Send the convert bonded devices as Json to an unity gameObject
+        @JvmStatic
+        fun sendListToUnity(jsonDevices : String){
+            Log.d("Unity","sendListToUnity called")
+            showToast("sendListToUnity called")
+            showToast(jsonDevices.toString())
+            UnityPlayer.UnitySendMessage("List_Paired_Devices", "OnDevicesReceive", jsonDevices)
+        }
+
+
     }
 }

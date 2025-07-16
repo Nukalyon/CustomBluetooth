@@ -2,6 +2,7 @@ plugins {
     //alias(libs.plugins.android.application)
     alias(libs.plugins.android.library)
     alias(libs.plugins.kotlin.android)
+    alias(libs.plugins.kotlin.serialization.json) apply true
 }
 
 android {
@@ -39,6 +40,7 @@ android {
 dependencies {
     compileOnly(files("libs/classes.jar"))
     //implementation(files("libs/unity_classes.jar"))
+    implementation(libs.kotlinx.serialization.json)
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.appcompat)
     implementation(libs.material)
