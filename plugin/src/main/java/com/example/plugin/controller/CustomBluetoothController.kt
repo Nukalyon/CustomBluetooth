@@ -5,6 +5,7 @@ import android.annotation.SuppressLint
 import android.bluetooth.BluetoothAdapter
 import android.bluetooth.BluetoothClass
 import android.bluetooth.BluetoothDevice
+import android.bluetooth.BluetoothHidDevice
 import android.bluetooth.BluetoothManager
 import android.content.Context
 import android.content.IntentFilter
@@ -67,7 +68,8 @@ class CustomBluetoothController private constructor(
     var dataTransferService : DataTransferService ?= null
 
 
-    internal var regex : Regex = "[A-Za-z0-9]*".toRegex()
+    //internal var regex : Regex = "[A-Za-z0-9]*".toRegex()
+    internal var regex : Regex = ".*".toRegex()
         get() = field
         set(value) { field = value }
 
@@ -75,8 +77,26 @@ class CustomBluetoothController private constructor(
     private val receiverDeviceFound = BluetoothDeviceReceiver { newDevice ->
         if(regex.containsMatchIn(newDevice.name ?: "")){
             _scannedDevices.update { devices ->
-                if (newDevice in devices) devices else devices + newDevice
+                if (newDevice !in devices){
+                    devices + newDevice
+                } else devices
             }
+            // Create a device to send to Unity
+            var deviceToSend = CustomBluetoothDeviceMapper().encodeSingleToJson(
+                CustomBluetoothDevice(
+                    name = newDevice.name,
+                    address = newDevice.address,
+                    deviceType = when (newDevice.bluetoothClass.majorDeviceClass) {
+                        BluetoothClass.Device.Major.AUDIO_VIDEO -> CustomBluetoothDevice.DeviceType.AUDIO
+                        BluetoothClass.Device.Major.COMPUTER -> CustomBluetoothDevice.DeviceType.COMPUTER
+                        BluetoothClass.Device.Major.PHONE -> CustomBluetoothDevice.DeviceType.PHONE
+                        else -> CustomBluetoothDevice.DeviceType.UNKNOWN
+                    },
+                    rssi = null
+                )
+            )
+            // Send the device found without regex comparison
+            MyUnityPlayer.sendJsonToUnity("List_Scanned_Devices", "OnDevicesScannedReceive", deviceToSend)
         }
         else{
             registerDebugMessage(
@@ -85,36 +105,6 @@ class CustomBluetoothController private constructor(
             )
         }
     }
-
-
-
-    /*
-    @SuppressLint("MissingPermission")
-    private fun isMatchingParameters(device: BluetoothDevice, matchRegex: Boolean, matchUUID: Boolean) : Boolean{
-        var res = false
-        try {
-            if(hasPermissions(Manifest.permission.BLUETOOTH_CONNECT)){
-                if(matchRegex && matchUUID){
-                    if(device.name == null){
-                        res = device.address === SERVICE_UUID
-                    }
-                    else{
-                        res = regex.containsMatchIn(device.name) || device.address == SERVICE_UUID
-                    }
-                }
-                else if(matchRegex){
-                    res = if(device.name == null) false else regex.containsMatchIn(device.name)
-                }
-                else{
-                    res = device.address === SERVICE_UUID
-                }
-            }
-        }
-        catch (exc: IOException){
-            registerDebugMessage("ERROR","isMatchingParameters exception : ${exc.printStackTrace()}")
-        }
-        return res
-    }*/
 
     @SuppressLint("MissingPermission")
     private val bluetoothReceiver = BluetoothReceiver { isConnected, device ->
@@ -297,6 +287,11 @@ class CustomBluetoothController private constructor(
         }
     }
 
+    fun toBluetoothDevice(device : CustomBluetoothDevice): BluetoothDevice? {
+        return adapter?.getRemoteDevice(device.address)
+    }
+
+
     // Singleton Pattern
     companion object{
         @Volatile
@@ -313,3 +308,35 @@ class CustomBluetoothController private constructor(
         }
     }
 }
+
+
+
+
+
+/*
+@SuppressLint("MissingPermission")
+private fun isMatchingParameters(device: BluetoothDevice, matchRegex: Boolean, matchUUID: Boolean) : Boolean{
+    var res = false
+    try {
+        if(hasPermissions(Manifest.permission.BLUETOOTH_CONNECT)){
+            if(matchRegex && matchUUID){
+                if(device.name == null){
+                    res = device.address === SERVICE_UUID
+                }
+                else{
+                    res = regex.containsMatchIn(device.name) || device.address == SERVICE_UUID
+                }
+            }
+            else if(matchRegex){
+                res = if(device.name == null) false else regex.containsMatchIn(device.name)
+            }
+            else{
+                res = device.address === SERVICE_UUID
+            }
+        }
+    }
+    catch (exc: IOException){
+        registerDebugMessage("ERROR","isMatchingParameters exception : ${exc.printStackTrace()}")
+    }
+    return res
+}*/

@@ -1,13 +1,12 @@
 package com.example.plugin
 
 import android.Manifest
-import android.app.Activity
-import android.bluetooth.BluetoothDevice
 import android.os.Bundle
 import android.util.Log
 import android.widget.Toast
 import androidx.annotation.RequiresPermission
 import com.example.plugin.controller.CustomBluetoothController
+import com.example.plugin.model.CustomBluetoothDeviceMapper
 import com.unity3d.player.UnityPlayer
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -95,8 +94,19 @@ class MyUnityPlayer : UnityPlayerActivity(){
         // Initiates connection to a specific Bluetooth device
         @JvmStatic
         @RequiresPermission(Manifest.permission.BLUETOOTH_CONNECT)
-        fun connectToDevice(device: BluetoothDevice) {
-            controller?.connectToDevice(device)
+        fun connectToDevice(jsonDevice: String) {
+            try{
+                // help to make the bridge between Unity and Android for a BluetoothDevice
+                Log.d("Unity", "Device received : $jsonDevice")
+                val customDevice = CustomBluetoothDeviceMapper().decodeSingleToDevice(jsonDevice)
+                Log.d("Unity", "Device received (1) : $customDevice")
+                val device = controller?.toBluetoothDevice(customDevice)
+                Log.d("Unity", "Device decoded (2) : $device")
+                device?.let { controller?.connectToDevice(it) }
+            }
+            catch (exc : Exception){
+                Log.d("Unity","Couldn't decode the device for connection", exc)
+            }
         }
 
         // Disconnects from the current Bluetooth device
@@ -135,16 +145,15 @@ class MyUnityPlayer : UnityPlayerActivity(){
         fun getPairedDevices() {
             Log.d("Unity","getPairedDevices called")
             showToast("getPairedDevices called")
-            sendListToUnity(controller?.getPairedDevicesAsString().toString())
+            sendJsonToUnity("List_Paired_Devices", "OnDevicesPairedReceive", controller?.getPairedDevicesAsString().toString())
         }
 
         // Send the convert bonded devices as Json to an unity gameObject
         @JvmStatic
-        fun sendListToUnity(jsonDevices : String){
+        fun sendJsonToUnity(gameObject : String, method : String, jsonDevices : String){
             Log.d("Unity","sendListToUnity called")
             showToast("sendListToUnity called")
-            showToast(jsonDevices.toString())
-            UnityPlayer.UnitySendMessage("List_Paired_Devices", "OnDevicesReceive", jsonDevices)
+            UnityPlayer.UnitySendMessage(gameObject, method, jsonDevices)
         }
 
 

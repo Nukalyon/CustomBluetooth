@@ -1,12 +1,12 @@
 package com.example.plugin.model
 
-import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 
 // This class will help to send The list of CustomBluetoothDevice as a single string
 class CustomBluetoothDeviceMapper {
     private val json = Json {
         prettyPrint = true // Optional: for better readability
+        ignoreUnknownKeys = true
     }
     fun encodeSingleToJson(device: CustomBluetoothDevice): String {
         return try {
@@ -17,19 +17,14 @@ class CustomBluetoothDeviceMapper {
     }
     fun encodeMultipleToJson(devices: List<CustomBluetoothDevice>) : String{
         return Json.encodeToString(devices)
+    }
 
-//        return try{
-//            //json.encodeString convert also a list, no need to concatenate
-//            Json.encodeToString(devices)
-////            var res = ""
-////            for(device in devices){
-////                res += encodeSingleToJson(device)
-////            }
-////            return res
-//        }
-//        catch (e: Exception) {
-//            throw BluetoothMappingException("Failed to encode CustomBluetoothDevice to JSON", e)
-//        }
+    fun decodeSingleToDevice(json : String): CustomBluetoothDevice{
+        return try {
+            Json.decodeFromString<CustomBluetoothDevice>(json)
+        }catch (e: Exception) {
+            throw BluetoothMappingException("Failed to decode string (Unity) to CustomBluetoothDevice", e)
+        }
     }
 }
 class BluetoothMappingException(message: String, cause: Throwable? = null) : Exception(message, cause)
