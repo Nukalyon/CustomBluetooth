@@ -23,10 +23,13 @@ import com.example.plugin.model.ConnectDeviceThread
 import com.example.plugin.model.CustomBluetoothDevice
 import com.example.plugin.model.CustomBluetoothDeviceMapper
 import com.example.plugin.model.ServerListenThread
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.launch
 import java.io.IOException
 import java.util.UUID
 
@@ -37,9 +40,8 @@ class CustomBluetoothController private constructor(
     private val manager by lazy {
         appContext.getSystemService(BluetoothManager::class.java)
     }
-    private val adapter by lazy {
-        manager?.adapter
-    }
+    private val adapter by lazy { manager?.adapter }
+
     internal val isBluetoothEnabled : Boolean
         get() = adapter?.isEnabled == true
 
@@ -75,6 +77,23 @@ class CustomBluetoothController private constructor(
 
     @SuppressLint("MissingPermission")
     private val receiverDeviceFound = BluetoothDeviceReceiver { newDevice ->
+        handleDeviceFound(newDevice)
+    }
+
+    @SuppressLint("MissingPermission")
+    private val bluetoothReceiver = BluetoothReceiver { isConnected, device ->
+        handleConnectionStateChange(isConnected, device)
+    }
+
+    init {
+        // Register receivers immediately on instance initialization
+        registerReceivers()
+        // Launch a coroutine to watch the change in the appstate
+        observeAppState()
+    }
+
+    @RequiresPermission(Manifest.permission.BLUETOOTH_CONNECT)
+    private fun handleDeviceFound(newDevice: BluetoothDevice) {
         if(regex.containsMatchIn(newDevice.name ?: "")){
             _scannedDevices.update { devices ->
                 if (newDevice !in devices){
@@ -106,8 +125,8 @@ class CustomBluetoothController private constructor(
         }
     }
 
-    @SuppressLint("MissingPermission")
-    private val bluetoothReceiver = BluetoothReceiver { isConnected, device ->
+    @RequiresPermission(Manifest.permission.BLUETOOTH_CONNECT)
+    private fun handleConnectionStateChange(isConnected: Boolean, device: BluetoothDevice) {
         var debug = ""
         if (isConnected) {
             _appState.value = AppState.Connected
@@ -120,8 +139,7 @@ class CustomBluetoothController private constructor(
         registerDebugMessage("DEBUG",debug)
     }
 
-    init {
-        // Register receivers immediately on instance initialization
+    private fun registerReceivers() {
         val filter = IntentFilter().apply {
             addAction(BluetoothAdapter.ACTION_STATE_CHANGED)
             addAction(BluetoothDevice.ACTION_ACL_CONNECTED)
@@ -129,6 +147,16 @@ class CustomBluetoothController private constructor(
         }
         appContext.registerReceiver(bluetoothReceiver, filter)
         appContext.registerReceiver(receiverDeviceFound, IntentFilter(BluetoothDevice.ACTION_FOUND))
+    }
+
+    private fun observeAppState() {
+        // Launch a coroutine to collect changes in _appState
+        CoroutineScope(Dispatchers.Main).launch {
+            _appState.collect { newState ->
+                // Call the method from MyUnityPlayer when the appState changes
+                MyUnityPlayer.sendAppState(newState)
+            }
+        }
     }
 
 
@@ -222,9 +250,7 @@ class CustomBluetoothController private constructor(
     @SuppressLint("MissingPermission")
     private fun updatePairedDevices() {
         registerDebugMessage("DEBUG", "updatePairedDevices called")
-        if (!hasPermissions(Manifest.permission.BLUETOOTH_CONNECT)) {
-            return
-        }
+        if (!hasPermissions(Manifest.permission.BLUETOOTH_CONNECT)) return
         _pairedDevices.value = adapter?.bondedDevices?.toList() ?: emptyList()
     }
 
@@ -265,19 +291,7 @@ class CustomBluetoothController private constructor(
         try {
             val bondedDevices = adapter?.bondedDevices.orEmpty()
             registerDebugMessage("Unity", "bonded list size = " + bondedDevices.size)
-            val customDevices = bondedDevices.map { bluetoothDevice ->
-                CustomBluetoothDevice(
-                    name = bluetoothDevice.name,
-                    address = bluetoothDevice.address,
-                    deviceType = when (bluetoothDevice.bluetoothClass.majorDeviceClass) {
-                        BluetoothClass.Device.Major.AUDIO_VIDEO -> CustomBluetoothDevice.DeviceType.AUDIO
-                        BluetoothClass.Device.Major.COMPUTER -> CustomBluetoothDevice.DeviceType.COMPUTER
-                        BluetoothClass.Device.Major.PHONE -> CustomBluetoothDevice.DeviceType.PHONE
-                        else -> CustomBluetoothDevice.DeviceType.UNKNOWN
-                    },
-                    rssi = null // RSSI not available for bonded devices
-                )
-            }
+            val customDevices = bondedDevices.map { it.toCustomBluetoothDevice() }
             // Return JSON string of all paired devices
             return CustomBluetoothDeviceMapper().encodeMultipleToJson(customDevices)
         } catch (e: Exception) {
@@ -289,6 +303,21 @@ class CustomBluetoothController private constructor(
 
     fun toBluetoothDevice(device : CustomBluetoothDevice): BluetoothDevice? {
         return adapter?.getRemoteDevice(device.address)
+    }
+
+    @RequiresPermission(Manifest.permission.BLUETOOTH_CONNECT)
+    private fun BluetoothDevice.toCustomBluetoothDevice(): CustomBluetoothDevice {
+        return CustomBluetoothDevice(
+            name = this.name,
+            address = this.address,
+            deviceType = when (this.bluetoothClass.majorDeviceClass) {
+                BluetoothClass.Device.Major.AUDIO_VIDEO -> CustomBluetoothDevice.DeviceType.AUDIO
+                BluetoothClass.Device.Major.COMPUTER -> CustomBluetoothDevice.DeviceType.COMPUTER
+                BluetoothClass.Device.Major.PHONE -> CustomBluetoothDevice.DeviceType.PHONE
+                else -> CustomBluetoothDevice.DeviceType.UNKNOWN
+            },
+            rssi = null // RSSI not available for bonded devices
+        )
     }
 
 
