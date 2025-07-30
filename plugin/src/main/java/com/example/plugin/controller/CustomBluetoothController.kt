@@ -5,20 +5,20 @@ import android.annotation.SuppressLint
 import android.bluetooth.BluetoothAdapter
 import android.bluetooth.BluetoothClass
 import android.bluetooth.BluetoothDevice
-import android.bluetooth.BluetoothHidDevice
 import android.bluetooth.BluetoothManager
 import android.content.Context
 import android.content.IntentFilter
 import android.content.pm.PackageManager
 import android.util.Log
-import android.widget.Toast
 import androidx.annotation.RequiresPermission
 import androidx.core.app.ActivityCompat
 import com.example.plugin.MyUnityPlayer
 import com.example.plugin.model.AppState
+import com.example.plugin.model.BluetoothConnectionReceiver
 import com.example.plugin.model.BluetoothDeviceReceiver
 import com.example.plugin.model.BluetoothError
-import com.example.plugin.model.BluetoothReceiver
+import com.example.plugin.model.BluetoothScanReceiver
+import com.example.plugin.model.BluetoothStateReceiver
 import com.example.plugin.model.ConnectDeviceThread
 import com.example.plugin.model.CustomBluetoothDevice
 import com.example.plugin.model.CustomBluetoothDeviceMapper
@@ -69,7 +69,6 @@ class CustomBluetoothController private constructor(
 
     var dataTransferService : DataTransferService ?= null
 
-
     //internal var regex : Regex = "[A-Za-z0-9]*".toRegex()
     internal var regex : Regex = ".*".toRegex()
         get() = field
@@ -81,8 +80,16 @@ class CustomBluetoothController private constructor(
     }
 
     @SuppressLint("MissingPermission")
-    private val bluetoothReceiver = BluetoothReceiver { isConnected, device ->
+    private val bluetoothConnectionReceiver = BluetoothConnectionReceiver { isConnected, device ->
         handleConnectionStateChange(isConnected, device)
+    }
+
+    private val bluetoothStateReceiver = BluetoothStateReceiver{ isEnabled ->
+        handleBluetoothStateChanged(isEnabled)
+    }
+
+    private val bluetoothScanReceiver = BluetoothScanReceiver{ scanMode ->
+        handleScanModeChanged(scanMode)
     }
 
     init {
@@ -139,13 +146,29 @@ class CustomBluetoothController private constructor(
         registerDebugMessage("DEBUG",debug)
     }
 
+    private fun handleBluetoothStateChanged(isEnabled: Boolean) {
+        if(isEnabled){
+            //Bluetooth turned ON
+        }
+        else{
+            //Bluetooth turned OFF
+        }
+    }
+
+    private fun handleScanModeChanged(mode: String) {
+        // Debug for the string
+        MyUnityPlayer.showToast("mode changed : $mode")
+    }
+
     private fun registerReceivers() {
         val filter = IntentFilter().apply {
             addAction(BluetoothAdapter.ACTION_STATE_CHANGED)
             addAction(BluetoothDevice.ACTION_ACL_CONNECTED)
             //addAction(BluetoothDevice.ACTION_ACL_DISCONNECTED)
         }
-        appContext.registerReceiver(bluetoothReceiver, filter)
+        appContext.registerReceiver(bluetoothConnectionReceiver, filter)
+        appContext.registerReceiver(bluetoothStateReceiver, filter)
+        appContext.registerReceiver(bluetoothScanReceiver, filter)
         appContext.registerReceiver(receiverDeviceFound, IntentFilter(BluetoothDevice.ACTION_FOUND))
     }
 
@@ -257,7 +280,9 @@ class CustomBluetoothController private constructor(
     fun release() {
         try{
             appContext.unregisterReceiver(receiverDeviceFound)
-            appContext.unregisterReceiver(bluetoothReceiver)
+            appContext.unregisterReceiver(bluetoothConnectionReceiver)
+            appContext.unregisterReceiver(bluetoothScanReceiver)
+            appContext.unregisterReceiver(bluetoothStateReceiver)
         }
         catch (exc: IOException){
             registerDebugMessage("ERROR", "UnregisterReceiver failed, details: ${exc.printStackTrace()}")
@@ -324,7 +349,7 @@ class CustomBluetoothController private constructor(
     // Singleton Pattern
     companion object{
         @Volatile
-        private var instance: CustomBluetoothController ?= null
+        internal var instance: CustomBluetoothController ?= null
         const val SERVICE_UUID = "9a2437a0-f4d5-4a64-8abf-3e3c45ad0293"
         const val NAME_SERVER = "link_arduino"
         const val ARDUINO_NAME = "FeatherBlue"

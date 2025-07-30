@@ -19,23 +19,28 @@ import kotlinx.coroutines.launch
 
 class MyUnityPlayer : UnityPlayerActivity(){
 
+    private var permissionManager : BluetoothPermissionManager ?= null
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
         // Simple debug feedback
-        UnityPlayer.currentActivity?.let {
-            Toast.makeText(it, "PluginActivity -> onCreate", Toast.LENGTH_LONG).show()
-        }
+//        UnityPlayer.currentActivity?.let {
+//            Toast.makeText(it, "PluginActivity -> onCreate", Toast.LENGTH_LONG).show()
+//        }
 
         // Safely initialize Bluetooth controller after Unity activity is available
         controller = CustomBluetoothController.getInstance(
-            requireNotNull(UnityPlayer.currentActivity) { "Unity activity is null" }
+            requireNotNull(UnityPlayer.currentActivity) { "Unity activity is null for controller" }
         )
 
+        // Initialize the Permission Manager
+        // Provide feedback if not allowed ?
         permissionManager = BluetoothPermissionManager(
             requireNotNull(UnityPlayer.currentActivity) { "Unity activity is null" }
         )
 
+        //Check if all the permissions listed are granted, else -> request them
         permissionManager?.let {
             if(!it.checkAllPermissionsGranted()){
                 it.requestBluetoothPermissions(UnityPlayer.currentActivity)
@@ -43,6 +48,7 @@ class MyUnityPlayer : UnityPlayerActivity(){
         }
     }
 
+    // Just checking the result of the user for the request of permission
     override fun onRequestPermissionsResult(
         requestCode: Int,
         permissions: Array<out String?>,
@@ -66,14 +72,6 @@ class MyUnityPlayer : UnityPlayerActivity(){
     companion object {
         // Controller reference used for Bluetooth actions
         private var controller: CustomBluetoothController? = null
-        private var permissionManager : BluetoothPermissionManager ?= null
-
-        // Simulated Unity messaging for debug
-        @JvmStatic
-        @JvmName("unitySendMessage")
-        fun unitySendMessage(gameObject: String, methodName: String, message: String) {
-            println("Message sent to Unity: $gameObject -> $methodName('$message')")
-        }
 
         // Display a message to the user via Android Toast
         @JvmStatic
@@ -118,12 +116,16 @@ class MyUnityPlayer : UnityPlayerActivity(){
         // Start the server
         @JvmStatic
         @JvmName("startServer")
-        fun startServer() = controller?.startServer()
+        fun startServer(){
+            controller?.startServer()
+        }
 
         // Disconnects from the current Bluetooth device
         @JvmStatic
         @JvmName("disconnect")
-        fun disconnect() = controller?.disconnectFromDevice()
+        fun disconnect(){
+            controller?.disconnectFromDevice()
+        }
 
         // Sends a message over Bluetooth, using a background coroutine
         @JvmStatic
