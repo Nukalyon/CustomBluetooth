@@ -163,13 +163,13 @@ class MyUnityPlayer : UnityPlayerActivity(){
         fun getPairedDevices() {
             Log.d("Unity","getPairedDevices called")
             //showToast("getPairedDevices called")
-            sendJsonToUnity("List_Paired_Devices", "OnDevicesPairedReceive", controller?.getPairedDevicesAsString().toString())
+            sendStringToUnity("List_Paired_Devices", "OnDevicesPairedReceive", controller?.getPairedDevicesAsString().toString())
         }
 
         // Send the convert bonded devices as Json to an unity gameObject
         @JvmStatic
         @JvmName("sendJsonToUnity")
-        fun sendJsonToUnity(gameObject : String, method : String, jsonDevices : String){
+        fun sendStringToUnity(gameObject : String, method : String, jsonDevices : String){
             Log.d("Unity","sendListToUnity called")
             //showToast("sendListToUnity called")
             UnityPlayer.UnitySendMessage(gameObject, method, jsonDevices)

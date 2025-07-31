@@ -122,7 +122,7 @@ class CustomBluetoothController private constructor(
                 )
             )
             // Send the device found without regex comparison
-            MyUnityPlayer.sendJsonToUnity("List_Scanned_Devices", "OnDevicesScannedReceive", deviceToSend)
+            MyUnityPlayer.sendStringToUnity("List_Scanned_Devices", "OnDevicesScannedReceive", deviceToSend)
         }
         else{
             registerDebugMessage(
@@ -241,11 +241,6 @@ class CustomBluetoothController private constructor(
         }
     }
 
-    override fun onMessageReceived(message: String) {
-        // Handle the received message (update UI, notify user, etc.)
-        registerDebugMessage("DEBUG","Message received: $message")
-    }
-
     override fun disconnectFromDevice() {
         _appState.value = AppState.Disconnecting
     }
@@ -257,6 +252,13 @@ class CustomBluetoothController private constructor(
         }?: run {
             registerDebugMessage("DEBUG","dataTransferService isn't initialized")
         }
+    }
+
+    // Callback from the DataTransferListener
+    override fun onMessageReceived(message: String) {
+        // Handle the received message (update UI, notify user, etc.)
+        registerDebugMessage("DEBUG","Message received: $message")
+        MyUnityPlayer.sendStringToUnity("Container_MessageReceived", "OnMessageReceive", message.trim())
     }
 
     // Vérifie si la permission spécifiée est accordée
