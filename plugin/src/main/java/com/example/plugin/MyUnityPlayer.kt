@@ -1,9 +1,14 @@
 package com.example.plugin
 
 import android.Manifest
+import android.app.Activity
+import android.content.Intent
+import android.os.Build
 import android.os.Bundle
 import android.util.Log
 import android.widget.Toast
+import androidx.activity.result.ActivityResult
+import androidx.activity.result.ActivityResultLauncher
 import androidx.annotation.RequiresPermission
 import com.example.plugin.controller.CustomBluetoothController
 import com.example.plugin.model.AppState
@@ -13,21 +18,12 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 
-/***    LE GOAT
- *  https://www.youtube.com/watch?v=R-cYild8ZYs
- */
 
 class MyUnityPlayer : UnityPlayerActivity(){
 
-    private var permissionManager : BluetoothPermissionManager ?= null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-
-        // Simple debug feedback
-//        UnityPlayer.currentActivity?.let {
-//            Toast.makeText(it, "PluginActivity -> onCreate", Toast.LENGTH_LONG).show()
-//        }
 
         // Safely initialize Bluetooth controller after Unity activity is available
         controller = CustomBluetoothController.getInstance(
@@ -69,9 +65,23 @@ class MyUnityPlayer : UnityPlayerActivity(){
         }
     }
 
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        super.onActivityResult(requestCode, resultCode, data)
+        if(requestCode == BluetoothPermissionManager.REQUEST_ACTIVATION){
+            if(resultCode == RESULT_OK){
+                // Bluetooth Activation Granted !
+            }
+            else{
+                // Shame on you user !
+            }
+        }
+    }
+
+
     companion object {
         // Controller reference used for Bluetooth actions
         private var controller: CustomBluetoothController? = null
+        private var permissionManager : BluetoothPermissionManager ?= null
 
         // Display a message to the user via Android Toast
         @JvmStatic
@@ -180,6 +190,17 @@ class MyUnityPlayer : UnityPlayerActivity(){
         fun sendAppState(state: AppState) {
             showToast("App state changed to : $state")
             UnityPlayer.UnitySendMessage("StateManager","OnAppStateChange", state.toString())
+        }
+
+        @JvmStatic
+        @JvmName("requestBluetoothActivation")
+        @RequiresPermission(Manifest.permission.BLUETOOTH_CONNECT)
+        fun requestBluetoothActivation(){
+            Log.d("Unity", "Enter requestBluetoothActivation kotlin")
+            if ((Build.VERSION.SDK_INT >= Build.VERSION_CODES.S)) {
+                Log.d("Unity", "Build >=")
+                permissionManager?.requestBluetooth(controller?.isBluetoothEnabled == true)
+            }
         }
     }
 }

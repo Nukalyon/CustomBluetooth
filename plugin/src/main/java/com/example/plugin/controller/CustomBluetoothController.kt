@@ -83,11 +83,9 @@ class CustomBluetoothController private constructor(
     private val bluetoothConnectionReceiver = BluetoothConnectionReceiver { isConnected, device ->
         handleConnectionStateChange(isConnected, device)
     }
-
     private val bluetoothStateReceiver = BluetoothStateReceiver{ isEnabled ->
         handleBluetoothStateChanged(isEnabled)
     }
-
     private val bluetoothScanReceiver = BluetoothScanReceiver{ scanMode ->
         handleScanModeChanged(scanMode)
     }
@@ -147,11 +145,12 @@ class CustomBluetoothController private constructor(
     }
 
     private fun handleBluetoothStateChanged(isEnabled: Boolean) {
+        // Send the status of the bluetooth to a Unity Object / script
         if(isEnabled){
-            //Bluetooth turned ON
+            // Bluetooth turned ON
         }
         else{
-            //Bluetooth turned OFF
+            // Bluetooth turned OFF
         }
     }
 
@@ -364,35 +363,3 @@ class CustomBluetoothController private constructor(
         }
     }
 }
-
-
-
-
-
-/*
-@SuppressLint("MissingPermission")
-private fun isMatchingParameters(device: BluetoothDevice, matchRegex: Boolean, matchUUID: Boolean) : Boolean{
-    var res = false
-    try {
-        if(hasPermissions(Manifest.permission.BLUETOOTH_CONNECT)){
-            if(matchRegex && matchUUID){
-                if(device.name == null){
-                    res = device.address === SERVICE_UUID
-                }
-                else{
-                    res = regex.containsMatchIn(device.name) || device.address == SERVICE_UUID
-                }
-            }
-            else if(matchRegex){
-                res = if(device.name == null) false else regex.containsMatchIn(device.name)
-            }
-            else{
-                res = device.address === SERVICE_UUID
-            }
-        }
-    }
-    catch (exc: IOException){
-        registerDebugMessage("ERROR","isMatchingParameters exception : ${exc.printStackTrace()}")
-    }
-    return res
-}*/
