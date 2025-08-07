@@ -1,14 +1,11 @@
 package com.example.plugin
 
 import android.Manifest
-import android.app.Activity
 import android.content.Intent
 import android.os.Build
 import android.os.Bundle
 import android.util.Log
 import android.widget.Toast
-import androidx.activity.result.ActivityResult
-import androidx.activity.result.ActivityResultLauncher
 import androidx.annotation.RequiresPermission
 import com.example.plugin.controller.CustomBluetoothController
 import com.example.plugin.model.AppState
@@ -201,6 +198,13 @@ class MyUnityPlayer : UnityPlayerActivity(){
                 Log.d("Unity", "Build >=")
                 permissionManager?.requestBluetooth(controller?.isBluetoothEnabled == true)
             }
+        }
+
+        @JvmStatic
+        @JvmName("sendBluetoothState")
+        fun sendBluetoothState(state: Boolean){
+            showToast("Bluetooth turned " + if (state) "ON" else "OFF")
+            UnityPlayer.UnitySendMessage("StateManager","OnBluetoothStateChange", if (state) "ON" else "OFF")
         }
     }
 }

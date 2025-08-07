@@ -148,9 +148,11 @@ class CustomBluetoothController private constructor(
         // Send the status of the bluetooth to a Unity Object / script
         if(isEnabled){
             // Bluetooth turned ON
+            MyUnityPlayer.sendBluetoothState(isEnabled)
         }
         else{
             // Bluetooth turned OFF
+            MyUnityPlayer.sendBluetoothState(isEnabled)
         }
     }
 
@@ -211,6 +213,7 @@ class CustomBluetoothController private constructor(
             if (hasPermissions(Manifest.permission.BLUETOOTH_CONNECT)) {
                 registerDebugMessage("DEBUG","Starting Server ...")
                 val thread = ServerListenThread(adapter, NAME_SERVER, toUuid(), this, this)
+                _appState.value = AppState.Connecting
                 thread.start()
             }else {
                 _errorState.value = BluetoothError.PermissionDenied
