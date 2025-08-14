@@ -16,6 +16,8 @@ class DataTransferService(
     private val outputStream: OutputStream = socket.outputStream
     private val buffer: ByteArray = ByteArray(1024)
 
+    // Method used by the server side, mainly to wait a connection, read the inputStream and
+    // when the bytes are loaded, call the callback with the message received
     override fun run() {
         super.run()
         var numBytes: Int
@@ -35,6 +37,8 @@ class DataTransferService(
         }
     }
 
+    // Method used by the client to send a message by the outputStream
+    // for the inputStream in the other device to catch
     fun write(bytes: ByteArray) {
         try {
             outputStream.write(bytes)

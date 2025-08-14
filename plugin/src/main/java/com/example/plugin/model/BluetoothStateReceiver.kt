@@ -19,7 +19,7 @@ class BluetoothStateReceiver(
     override fun onReceive(context: Context?, intent: Intent?) {
         Log.d("DEBUG", "${intent?.action} received")
         when(intent?.action){
-
+            // Action when the bluetooth turn On or OFF
             BluetoothAdapter.ACTION_STATE_CHANGED ->{
                 val state = intent.getIntExtra(BluetoothAdapter.EXTRA_STATE, BluetoothAdapter.ERROR)
                 Log.d("DEBUG", "New state: $state")

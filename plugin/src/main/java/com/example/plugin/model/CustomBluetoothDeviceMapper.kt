@@ -8,6 +8,8 @@ class CustomBluetoothDeviceMapper {
         prettyPrint = true // Optional: for better readability
         ignoreUnknownKeys = true
     }
+
+    // Both methods could be written in one by surcharge
     fun encodeSingleToJson(device: CustomBluetoothDevice): String {
         return try {
             json.encodeToString(device)
@@ -18,6 +20,7 @@ class CustomBluetoothDeviceMapper {
     fun encodeMultipleToJson(devices: List<CustomBluetoothDevice>) : String{
         return Json.encodeToString(devices)
     }
+
 
     fun decodeSingleToDevice(json : String): CustomBluetoothDevice{
         return try {

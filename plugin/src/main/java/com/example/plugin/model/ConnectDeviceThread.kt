@@ -18,16 +18,20 @@ class ConnectDeviceThread(
     private val messageListener: DataTransferService.MessageListener, // Add listener
     private val controller : CustomBluetoothController
 ) : Thread() {
+    // Create the anchor point, socket for the connection
     private val socket: BluetoothSocket? by lazy(LazyThreadSafetyMode.NONE) {
         device.createRfcommSocketToServiceRecord(uuid)
     }
+
     override fun run() {
+        // Cancel the discovery because we are trying to connect
         if (adapter?.isDiscovering == true) {
             adapter.cancelDiscovery()
         }
         try {
             socket?.let { socket ->
                 socket.connect()
+                // Creation of the service for the information exchange with the callback
                 val dataTransferService = DataTransferService(socket, messageListener) // Pass listener
                 controller.dataTransferService = dataTransferService
                 dataTransferService.start()
@@ -37,7 +41,7 @@ class ConnectDeviceThread(
         }
     }
 
-    private fun cancel(){
+    fun cancel(){
         try{
             socket?.close()
         }

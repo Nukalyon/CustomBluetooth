@@ -1,6 +1,7 @@
 package com.example.plugin
 
 import android.Manifest
+import android.annotation.SuppressLint
 import android.content.Intent
 import android.os.Build
 import android.os.Bundle
@@ -65,11 +66,21 @@ class MyUnityPlayer : UnityPlayerActivity(){
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
         if(requestCode == BluetoothPermissionManager.REQUEST_ACTIVATION){
+            // Check not necessary because we check the event of activation
             if(resultCode == RESULT_OK){
                 // Bluetooth Activation Granted !
             }
             else{
                 // Shame on you user !
+            }
+        }
+        if(requestCode == BluetoothPermissionManager.REQUEST_VISIBILITY){
+            // Check not necessary
+            if(resultCode == RESULT_OK){
+                // Device is being visible for TIME_VISIBLE seconds
+            }
+            else{
+                // Device can not be found by others devices
             }
         }
     }
@@ -78,7 +89,15 @@ class MyUnityPlayer : UnityPlayerActivity(){
     companion object {
         // Controller reference used for Bluetooth actions
         private var controller: CustomBluetoothController? = null
+        // PermissionManager to extract all the logic based on the permission
         private var permissionManager : BluetoothPermissionManager ?= null
+        var TIME_VISIBLE = 60   // Time in seconds the device will be visible
+
+        /************************************************************************
+         *  Add methods :
+         *      - Add the tag JVMStatic
+         *      - Add JVMName with the name you want the caller to find the method         *
+         *************************************************************************/
 
         // Display a message to the user via Android Toast
         @JvmStatic
@@ -108,11 +127,11 @@ class MyUnityPlayer : UnityPlayerActivity(){
         fun connectToDevice(jsonDevice: String) {
             try{
                 // help to make the bridge between Unity and Android for a BluetoothDevice
-                Log.d("Unity", "Device received : $jsonDevice")
+                //Log.d("Unity", "Device received : $jsonDevice")
                 val customDevice = CustomBluetoothDeviceMapper().decodeSingleToDevice(jsonDevice)
-                Log.d("Unity", "Device received (1) : $customDevice")
+                //Log.d("Unity", "Device received (1) : $customDevice")
                 val device = controller?.toBluetoothDevice(customDevice)
-                Log.d("Unity", "Device decoded (2) : $device")
+                //Log.d("Unity", "Device decoded (2) : $device")
                 device?.let { controller?.connectToDevice(it) }
             }
             catch (exc : Exception){
@@ -160,6 +179,7 @@ class MyUnityPlayer : UnityPlayerActivity(){
         @JvmName("getBluetoothStatus")
         fun getBluetoothStatus(): Boolean = controller?.isBluetoothEnabled == true
 
+        // Get the visibility of the device
         @JvmStatic
         @JvmName("isDeviceVisible")
         fun isDeviceVisible() : Boolean = controller?.isDeviceVisible == true
@@ -169,8 +189,37 @@ class MyUnityPlayer : UnityPlayerActivity(){
         @JvmName("getPairedDevices")
         fun getPairedDevices() {
             Log.d("Unity","getPairedDevices called")
-            //showToast("getPairedDevices called")
             sendStringToUnity("List_Paired_Devices", "OnDevicesPairedReceive", controller?.getPairedDevicesAsString().toString())
+        }
+
+        // Called when the appState was Connected and Bluetooth turned OFF then ON
+        @SuppressLint("MissingPermission")
+        @JvmStatic
+        @JvmName("retryConnection")
+        fun retryConnection(){
+            Log.d("Unity","Test reconnection to device : " + controller?.connectedDevice )
+            controller?.connectedDevice?.let { device ->
+                controller?.connectToDevice(device)
+            }
+        }
+
+        // Explicit
+        @JvmStatic
+        @JvmName("requestBluetoothActivation")
+        @RequiresPermission(Manifest.permission.BLUETOOTH_CONNECT)
+        fun requestBluetoothActivation(){
+            //Log.d("Unity", "Enter requestBluetoothActivation kotlin")
+            if ((Build.VERSION.SDK_INT >= Build.VERSION_CODES.S)) {
+                //Log.d("Unity", "Build >=")
+                permissionManager?.requestBluetooth(controller?.isBluetoothEnabled == true)
+            }
+        }
+
+        // Explicit
+        @JvmStatic
+        @JvmName("requestVisibility")
+        fun requestVisibility(){
+            permissionManager?.requestVisibility(TIME_VISIBLE)
         }
 
         // Send the convert bonded devices as Json to an unity gameObject
@@ -182,6 +231,7 @@ class MyUnityPlayer : UnityPlayerActivity(){
             UnityPlayer.UnitySendMessage(gameObject, method, jsonDevices)
         }
 
+        // Called from the plugin when the state of the app changes
         @JvmStatic
         @JvmName("sendAppState")
         fun sendAppState(state: AppState) {
@@ -189,17 +239,7 @@ class MyUnityPlayer : UnityPlayerActivity(){
             UnityPlayer.UnitySendMessage("StateManager","OnAppStateChange", state.toString())
         }
 
-        @JvmStatic
-        @JvmName("requestBluetoothActivation")
-        @RequiresPermission(Manifest.permission.BLUETOOTH_CONNECT)
-        fun requestBluetoothActivation(){
-            Log.d("Unity", "Enter requestBluetoothActivation kotlin")
-            if ((Build.VERSION.SDK_INT >= Build.VERSION_CODES.S)) {
-                Log.d("Unity", "Build >=")
-                permissionManager?.requestBluetooth(controller?.isBluetoothEnabled == true)
-            }
-        }
-
+        // Send the state of the bluetooth when it turn ON or OFF
         @JvmStatic
         @JvmName("sendBluetoothState")
         fun sendBluetoothState(state: Boolean){

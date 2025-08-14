@@ -16,6 +16,7 @@ class BluetoothDeviceReceiver (
     @RequiresPermission(Manifest.permission.BLUETOOTH_CONNECT)
     override fun onReceive(context: Context?, intent: Intent?) {
         when(intent?.action){
+            // Action when the device find another bluetooth device visible
             BluetoothDevice.ACTION_FOUND->{
                 val device =
                     if(VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU)
@@ -25,6 +26,8 @@ class BluetoothDeviceReceiver (
                     else{
                         intent.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE)
                     }
+                // If the device is not null and the name is not null, we show it
+                // Can implement for the mac address here (else name = "N/O" then send)
                 device?.let {
                     if(device.name != null){
                         onDeviceFound(device)

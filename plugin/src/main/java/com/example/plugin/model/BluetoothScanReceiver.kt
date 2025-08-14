@@ -16,7 +16,7 @@ class BluetoothScanReceiver (
     override fun onReceive(context: Context?, intent: Intent?) {
         Log.d("DEBUG", "${intent?.action} received")
         when(intent?.action){
-
+            // Action when scan mode of the device is changed
             BluetoothAdapter.ACTION_SCAN_MODE_CHANGED ->{
                 var state =
                     if (VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {

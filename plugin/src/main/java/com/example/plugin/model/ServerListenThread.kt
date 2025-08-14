@@ -18,7 +18,7 @@ class ServerListenThread(
     private val messageListener: DataTransferService.MessageListener,
     private val controller : CustomBluetoothController
 ) : Thread() {
-
+    // Creating the waiting area for incoming messages
     private val serverSocket : BluetoothServerSocket? by lazy(LazyThreadSafetyMode.NONE){
         adapter?.listenUsingInsecureRfcommWithServiceRecord(serverName, uuid)
     }
@@ -27,6 +27,7 @@ class ServerListenThread(
         super.run()
         var shouldLoop = true
         while (shouldLoop){
+            //Try to catch an entry
             val socket: BluetoothSocket? = try {
                 serverSocket?.accept()
             } catch (e: IOException) {
@@ -35,6 +36,7 @@ class ServerListenThread(
                 null
             }
             socket?.also {
+                // Socket found, waiting messages and no loop
                 val dataTransferService = DataTransferService(socket, messageListener)
                 controller.dataTransferService = dataTransferService
                 dataTransferService.start()
@@ -44,7 +46,7 @@ class ServerListenThread(
         }
     }
 
-    private fun cancel() {
+    fun cancel() {
         try {
             serverSocket?.close()
         } catch (e: IOException) {

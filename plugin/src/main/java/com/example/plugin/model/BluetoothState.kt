@@ -1,5 +1,6 @@
 package com.example.plugin.model
 
+// Recoupment of all the state for the app, used for switch
 sealed class AppState {
     object Idle : AppState()
     object Scanning : AppState()
@@ -10,7 +11,7 @@ sealed class AppState {
     data class Error(val message: String) : AppState()
 }
 
-// Bluetooth error types
+// Bluetooth error types, not really used
 sealed class BluetoothError {
     object PermissionDenied : BluetoothError()
     object BluetoothDisabled : BluetoothError()

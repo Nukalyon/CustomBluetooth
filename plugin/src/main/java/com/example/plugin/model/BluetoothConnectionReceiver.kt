@@ -18,6 +18,7 @@ class BluetoothConnectionReceiver (
     override fun onReceive(context: Context?, intent: Intent?) {
         Log.d("DEBUG", "${intent?.action} received")
         when(intent?.action){
+            // Action when the device enter in mode Connected
             BluetoothDevice.ACTION_ACL_CONNECTED -> {
                 val device: BluetoothDevice? =
                     if (VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
@@ -31,6 +32,7 @@ class BluetoothConnectionReceiver (
                 device?.let { onConnectionStateChanged(true, it) }
             }
 
+            // Action when the device enter in mode Disconnected
             BluetoothDevice.ACTION_ACL_DISCONNECTED -> {
                 val device: BluetoothDevice? =
                     if (VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {

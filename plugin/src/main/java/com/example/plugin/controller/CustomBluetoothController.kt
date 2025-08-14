@@ -45,6 +45,7 @@ class CustomBluetoothController private constructor(
     internal val isBluetoothEnabled : Boolean
         get() = adapter?.isEnabled == true
 
+    // The scanMode we are looking for is Connectable and Discoverable in our case
     internal val isDeviceVisible : Boolean
         @RequiresPermission(Manifest.permission.BLUETOOTH_SCAN)
         get() = adapter?.scanMode == BluetoothAdapter.SCAN_MODE_CONNECTABLE_DISCOVERABLE
@@ -67,18 +68,29 @@ class CustomBluetoothController private constructor(
     override val debugMessages: StateFlow<List<String>>
         get() = _debugMessages.asStateFlow()
 
-    var dataTransferService : DataTransferService ?= null
+    // Keep track of the last device connect, maybe reconnect in the future
+    internal var connectedDevice : BluetoothDevice ?= null
+        get() = field
+        set(value) {field = value}
 
-    //internal var regex : Regex = "[A-Za-z0-9]*".toRegex()
+    // All the service / thread used, cancel when something happen
+    var dataTransferService : DataTransferService   ?= null
+    var serverListenThread  : ServerListenThread    ?= null
+    var connectDeviceThread : ConnectDeviceThread   ?= null
+
     internal var regex : Regex = ".*".toRegex()
         get() = field
         set(value) { field = value }
 
+    // All the receivers and the method to handle each case
+    // | -> BluetoothDeviceReceiver -> Triggered when a device found when scanning
+    // | -> BluetoothConnectionReceiver -> Triggered when the device connect / disconnect
+    // | -> BluetoothStateReceiver -> Triggered when the bluetooth turns ON / OFF
+    // | -> BluetoothScanReceiver -> Triggered when the scan mode changes (never saw it)
     @SuppressLint("MissingPermission")
     private val receiverDeviceFound = BluetoothDeviceReceiver { newDevice ->
         handleDeviceFound(newDevice)
     }
-
     @SuppressLint("MissingPermission")
     private val bluetoothConnectionReceiver = BluetoothConnectionReceiver { isConnected, device ->
         handleConnectionStateChange(isConnected, device)
@@ -100,27 +112,23 @@ class CustomBluetoothController private constructor(
     @RequiresPermission(Manifest.permission.BLUETOOTH_CONNECT)
     private fun handleDeviceFound(newDevice: BluetoothDevice) {
         if(regex.containsMatchIn(newDevice.name ?: "")){
+            var deviceCanBeAdded = false
+            if(!_scannedDevices.value.contains(newDevice) && !_pairedDevices.value.contains(newDevice)){
+                deviceCanBeAdded = true
+            }
             _scannedDevices.update { devices ->
-                if (newDevice !in devices){
+                if (deviceCanBeAdded){
                     devices + newDevice
                 } else devices
             }
             // Create a device to send to Unity
             var deviceToSend = CustomBluetoothDeviceMapper().encodeSingleToJson(
-                CustomBluetoothDevice(
-                    name = newDevice.name,
-                    address = newDevice.address,
-                    deviceType = when (newDevice.bluetoothClass.majorDeviceClass) {
-                        BluetoothClass.Device.Major.AUDIO_VIDEO -> CustomBluetoothDevice.DeviceType.AUDIO
-                        BluetoothClass.Device.Major.COMPUTER -> CustomBluetoothDevice.DeviceType.COMPUTER
-                        BluetoothClass.Device.Major.PHONE -> CustomBluetoothDevice.DeviceType.PHONE
-                        else -> CustomBluetoothDevice.DeviceType.UNKNOWN
-                    },
-                    rssi = null
-                )
+                newDevice.toCustomBluetoothDevice()
             )
-            // Send the device found without regex comparison
-            MyUnityPlayer.sendStringToUnity("List_Scanned_Devices", "OnDevicesScannedReceive", deviceToSend)
+            if(deviceCanBeAdded){
+                // Send the device found with regex comparison
+                MyUnityPlayer.sendStringToUnity("List_Scanned_Devices", "OnDevicesScannedReceive", deviceToSend)
+            }
         }
         else{
             registerDebugMessage(
@@ -136,6 +144,7 @@ class CustomBluetoothController private constructor(
         if (isConnected) {
             _appState.value = AppState.Connected
             _errorState.value = null
+            connectedDevice = device
             debug = "Connected to device: ${device.name} / ${device.address}"
         } else {
             _appState.value = AppState.Disconnected
@@ -146,14 +155,7 @@ class CustomBluetoothController private constructor(
 
     private fun handleBluetoothStateChanged(isEnabled: Boolean) {
         // Send the status of the bluetooth to a Unity Object / script
-        if(isEnabled){
-            // Bluetooth turned ON
-            MyUnityPlayer.sendBluetoothState(isEnabled)
-        }
-        else{
-            // Bluetooth turned OFF
-            MyUnityPlayer.sendBluetoothState(isEnabled)
-        }
+        MyUnityPlayer.sendBluetoothState(isEnabled)
     }
 
     private fun handleScanModeChanged(mode: String) {
@@ -163,13 +165,13 @@ class CustomBluetoothController private constructor(
 
     private fun registerReceivers() {
         val filter = IntentFilter().apply {
-            addAction(BluetoothAdapter.ACTION_STATE_CHANGED)
             addAction(BluetoothDevice.ACTION_ACL_CONNECTED)
-            //addAction(BluetoothDevice.ACTION_ACL_DISCONNECTED)
+            addAction(BluetoothDevice.ACTION_ACL_DISCONNECTED)
         }
+        // For each receiver, we attach a filter
         appContext.registerReceiver(bluetoothConnectionReceiver, filter)
-        appContext.registerReceiver(bluetoothStateReceiver, filter)
-        appContext.registerReceiver(bluetoothScanReceiver, filter)
+        appContext.registerReceiver(bluetoothStateReceiver, IntentFilter(BluetoothAdapter.ACTION_STATE_CHANGED))
+        appContext.registerReceiver(bluetoothScanReceiver, IntentFilter(BluetoothAdapter.ACTION_SCAN_MODE_CHANGED))
         appContext.registerReceiver(receiverDeviceFound, IntentFilter(BluetoothDevice.ACTION_FOUND))
     }
 
@@ -212,9 +214,9 @@ class CustomBluetoothController private constructor(
         try {
             if (hasPermissions(Manifest.permission.BLUETOOTH_CONNECT)) {
                 registerDebugMessage("DEBUG","Starting Server ...")
-                val thread = ServerListenThread(adapter, NAME_SERVER, toUuid(), this, this)
+                serverListenThread = ServerListenThread(adapter, NAME_SERVER, toUuid(), this, this)
                 _appState.value = AppState.Connecting
-                thread.start()
+                serverListenThread?.start()
             }else {
                 _errorState.value = BluetoothError.PermissionDenied
             }
@@ -223,17 +225,13 @@ class CustomBluetoothController private constructor(
         }
     }
 
-    @Volatile
-    private var connectThread: ConnectDeviceThread? = null
-
     @RequiresPermission(Manifest.permission.BLUETOOTH_CONNECT)
     override fun connectToDevice(device: BluetoothDevice) {
         try {
             if (hasPermissions(Manifest.permission.BLUETOOTH_CONNECT)) {
                 _appState.value = AppState.Connecting
-                val thread = ConnectDeviceThread(adapter, toUuid(), device, this, this) // Pass listener
-                connectThread = thread
-                thread.start()
+                connectDeviceThread = ConnectDeviceThread(adapter, toUuid(), device, this, this) // Pass listener
+                connectDeviceThread?.start()
             }else{
                 _errorState.value = BluetoothError.PermissionDenied
             }
@@ -244,7 +242,19 @@ class CustomBluetoothController private constructor(
     }
 
     override fun disconnectFromDevice() {
-        _appState.value = AppState.Disconnecting
+        try{
+            _appState.value = AppState.Disconnecting
+            // If the device is client, close the connection
+            connectDeviceThread?.cancel()
+            // If the device is server, close the listening
+            serverListenThread?.cancel()
+            // For both, close the bridge
+            dataTransferService?.cancel()
+        }
+        catch (exc : Exception){
+            // Error
+            _errorState.value = BluetoothError.Unknown("Failed Disconnection with:\n${exc.printStackTrace()}")
+        }
     }
 
     override fun sendMessage(message: String) {
@@ -263,7 +273,8 @@ class CustomBluetoothController private constructor(
         MyUnityPlayer.sendStringToUnity("Container_MessageReceived", "OnMessageReceive", message.trim())
     }
 
-    // Vérifie si la permission spécifiée est accordée
+    // Check if the permission is granted
+    // Could be exchanged with the BluetoothPermissionManager.checkPermissionGranted(permission)
     fun hasPermissions(permission: String): Boolean {
         val temp = ActivityCompat.checkSelfPermission(appContext, permission) == PackageManager.PERMISSION_GRANTED
         //registerDebugMessage("DEBUG","hasPermission? for ${permission.removePrefix("android.permission.")} = $temp")
@@ -281,6 +292,7 @@ class CustomBluetoothController private constructor(
         _pairedDevices.value = adapter?.bondedDevices?.toList() ?: emptyList()
     }
 
+    // Unregister all the receivers
     fun release() {
         try{
             appContext.unregisterReceiver(receiverDeviceFound)
@@ -308,6 +320,7 @@ class CustomBluetoothController private constructor(
                 Log.d(tag,mess)
             }
         }
+        // Useless for the Unity App, not for android app
         _debugMessages.update { messages ->  if(!messages.contains(mess)) messages + mess else messages }
     }
 
@@ -320,6 +333,7 @@ class CustomBluetoothController private constructor(
         try {
             val bondedDevices = adapter?.bondedDevices.orEmpty()
             registerDebugMessage("Unity", "bonded list size = " + bondedDevices.size)
+            // For each devices, map them into a CustomBluetoothDevice
             val customDevices = bondedDevices.map { it.toCustomBluetoothDevice() }
             // Return JSON string of all paired devices
             return CustomBluetoothDeviceMapper().encodeMultipleToJson(customDevices)
@@ -329,6 +343,10 @@ class CustomBluetoothController private constructor(
             return "[]" // Return empty array JSON string on error
         }
     }
+
+    // The following device conversion are needed especially when we want to transfer or receive
+    // a device by json.
+    // The serialization help for 80% of the work but not entirely so we help it a little
 
     fun toBluetoothDevice(device : CustomBluetoothDevice): BluetoothDevice? {
         return adapter?.getRemoteDevice(device.address)
@@ -354,10 +372,9 @@ class CustomBluetoothController private constructor(
     companion object{
         @Volatile
         internal var instance: CustomBluetoothController ?= null
+        // Service and Name are used to create the bridge for information exchange
         const val SERVICE_UUID = "9a2437a0-f4d5-4a64-8abf-3e3c45ad0293"
         const val NAME_SERVER = "link_arduino"
-        const val ARDUINO_NAME = "FeatherBlue"
-        const val TABLETTE = "Yannick"
 
         fun getInstance(context: Context) : CustomBluetoothController{
             return instance?:synchronized(this) {
