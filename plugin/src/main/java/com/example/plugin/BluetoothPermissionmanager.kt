@@ -3,6 +3,7 @@ package com.example.plugin
 import android.Manifest
 import android.annotation.SuppressLint
 import android.app.Activity
+import android.app.AlertDialog
 import android.bluetooth.BluetoothAdapter
 import android.content.Context
 import android.content.Intent
@@ -10,6 +11,7 @@ import android.content.pm.PackageManager
 import android.os.Build
 import android.util.Log
 import androidx.core.app.ActivityCompat
+import androidx.core.app.ActivityCompat.shouldShowRequestPermissionRationale
 import androidx.core.content.ContextCompat
 
 
@@ -67,15 +69,48 @@ class BluetoothPermissionManager(private val context: Context){
         neededPermissions?.let {
             if (it.isNotEmpty()) {
                 activity?.let{
-                    ActivityCompat.requestPermissions(
-                        activity,
-                        neededPermissions,
-                        REQUEST_CODE_BLUETOOTH
-                    )
+                    if(shouldShowRequestPermissionRationale(activity, neededPermissions.toString())){
+                        // Display to the user the reason why we need this permission
+                        createAlertDialog(neededPermissions)
+                    }
+                    else{
+                        ActivityCompat.requestPermissions(
+                            activity,
+                            neededPermissions,
+                            REQUEST_CODE_BLUETOOTH
+                        )
+                    }
                 }
             }
-
         }
+    }
+
+    private fun createAlertDialog(neededPermissions: Array<String>) {
+        // ref :
+        // https://m3.material.io/components/dialogs/guidelines
+        // https://developer.android.com/develop/ui/views/components/dialogs?hl=fr
+        val builder: AlertDialog.Builder = AlertDialog.Builder(context)
+        builder
+            .setTitle("Besoin de permissions")
+            .setMessage(
+                "L'application a besoin de ces permissions afin de fonctionner correctement :\n" +
+                "- ADVERTISE pour que l'apparail puisse être visible\n" +
+                "- CONNECT pour qu'une connexion puisse être créée\n" +
+                "- ADMIN pour un meilleur contrôle des paramètres Bluetooth\n" +
+                "- SCAN pour que l'on puisse rechercher d'autres appareils")
+            .setPositiveButton("Je comprends") { dialog, which ->
+                ActivityCompat.requestPermissions(
+                    context as Activity,
+                    neededPermissions,
+                    REQUEST_CODE_BLUETOOTH
+                )
+            }
+            .setNegativeButton("Je refuse") { dialog, which ->
+                // Do something else.
+            }
+
+        val dialog: AlertDialog = builder.create()
+        dialog.show()
     }
 
     fun onRequestPermissionsResult(

@@ -1,4 +1,4 @@
-package com.example.plugin.controller
+package com.example.plugin.model.thread
 
 import android.bluetooth.BluetoothSocket
 import android.util.Log

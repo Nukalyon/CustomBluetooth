@@ -17,6 +17,7 @@ interface IBluetoothController {
     fun stopDiscovery()
     fun startServer()
     fun connectToDevice(device: BluetoothDevice)
+    fun pairToDevice(device: BluetoothDevice)
     fun disconnectFromDevice()
     fun sendMessage(message: String)
 }

@@ -4,10 +4,12 @@ package com.example.plugin.model
 sealed class AppState {
     object Idle : AppState()
     object Scanning : AppState()
+    object Pairing : AppState()
     object Connecting : AppState()
     object Connected : AppState()
     object Disconnecting : AppState()
     object Disconnected : AppState()
+
     data class Error(val message: String) : AppState()
 }
 

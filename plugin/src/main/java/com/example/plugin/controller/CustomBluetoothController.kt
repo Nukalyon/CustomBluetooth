@@ -14,15 +14,17 @@ import androidx.annotation.RequiresPermission
 import androidx.core.app.ActivityCompat
 import com.example.plugin.MyUnityPlayer
 import com.example.plugin.model.AppState
-import com.example.plugin.model.BluetoothConnectionReceiver
-import com.example.plugin.model.BluetoothDeviceReceiver
+import com.example.plugin.model.receiver.BluetoothBondReceiver
+import com.example.plugin.model.receiver.BluetoothConnectionReceiver
+import com.example.plugin.model.receiver.BluetoothDeviceReceiver
 import com.example.plugin.model.BluetoothError
-import com.example.plugin.model.BluetoothScanReceiver
-import com.example.plugin.model.BluetoothStateReceiver
-import com.example.plugin.model.ConnectDeviceThread
+import com.example.plugin.model.receiver.BluetoothScanReceiver
+import com.example.plugin.model.receiver.BluetoothStateReceiver
+import com.example.plugin.model.thread.ConnectDeviceThread
 import com.example.plugin.model.CustomBluetoothDevice
 import com.example.plugin.model.CustomBluetoothDeviceMapper
-import com.example.plugin.model.ServerListenThread
+import com.example.plugin.model.thread.DataTransferService
+import com.example.plugin.model.thread.ServerListenThread
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -74,7 +76,7 @@ class CustomBluetoothController private constructor(
         set(value) {field = value}
 
     // All the service / thread used, cancel when something happen
-    var dataTransferService : DataTransferService   ?= null
+    var dataTransferService : DataTransferService?= null
     var serverListenThread  : ServerListenThread    ?= null
     var connectDeviceThread : ConnectDeviceThread   ?= null
 
@@ -87,8 +89,9 @@ class CustomBluetoothController private constructor(
     // | -> BluetoothConnectionReceiver -> Triggered when the device connect / disconnect
     // | -> BluetoothStateReceiver -> Triggered when the bluetooth turns ON / OFF
     // | -> BluetoothScanReceiver -> Triggered when the scan mode changes (never saw it)
+    // | -> BluetoothBondReceiver -> Triggered when device is trying to pair
     @SuppressLint("MissingPermission")
-    private val receiverDeviceFound = BluetoothDeviceReceiver { newDevice ->
+    private val bluetoothDeviceFoundReceiver = BluetoothDeviceReceiver { newDevice ->
         handleDeviceFound(newDevice)
     }
     @SuppressLint("MissingPermission")
@@ -100,6 +103,10 @@ class CustomBluetoothController private constructor(
     }
     private val bluetoothScanReceiver = BluetoothScanReceiver{ scanMode ->
         handleScanModeChanged(scanMode)
+    }
+    @SuppressLint("MissingPermission")
+    private val bluetoothBondReceiver = BluetoothBondReceiver{ device, isBonding ->
+        handleBondStateChange(device, isBonding)
     }
 
     init {
@@ -163,6 +170,21 @@ class CustomBluetoothController private constructor(
         MyUnityPlayer.showToast("mode changed : $mode")
     }
 
+    @RequiresPermission(Manifest.permission.BLUETOOTH_CONNECT)
+    private fun handleBondStateChange(device: BluetoothDevice, isBonding: Boolean) {
+        var msg = ""
+        if(isBonding){
+            _appState.value = AppState.Pairing
+            msg += "is currently bonding to " + device.name
+        } else{
+            msg +=  "is already bonded to " + device.name
+            // Pairing create a bond / connection, disconnect so the user can connect by himself
+            disconnectFromDevice()
+            _appState.value = AppState.Idle
+        }
+        MyUnityPlayer.showToast(msg)
+    }
+
     private fun registerReceivers() {
         val filter = IntentFilter().apply {
             addAction(BluetoothDevice.ACTION_ACL_CONNECTED)
@@ -172,7 +194,8 @@ class CustomBluetoothController private constructor(
         appContext.registerReceiver(bluetoothConnectionReceiver, filter)
         appContext.registerReceiver(bluetoothStateReceiver, IntentFilter(BluetoothAdapter.ACTION_STATE_CHANGED))
         appContext.registerReceiver(bluetoothScanReceiver, IntentFilter(BluetoothAdapter.ACTION_SCAN_MODE_CHANGED))
-        appContext.registerReceiver(receiverDeviceFound, IntentFilter(BluetoothDevice.ACTION_FOUND))
+        appContext.registerReceiver(bluetoothDeviceFoundReceiver, IntentFilter(BluetoothDevice.ACTION_FOUND))
+        appContext.registerReceiver(bluetoothBondReceiver, IntentFilter(BluetoothDevice.ACTION_BOND_STATE_CHANGED))
     }
 
     private fun observeAppState() {
@@ -240,6 +263,21 @@ class CustomBluetoothController private constructor(
             _appState.value = AppState.Error("Connection failed: ${exc.message}")
         }
     }
+    @RequiresPermission(Manifest.permission.BLUETOOTH_CONNECT)
+    override fun pairToDevice(device: BluetoothDevice) {
+        try {
+            if (hasPermissions(Manifest.permission.BLUETOOTH_CONNECT)) {
+                _appState.value = AppState.Pairing
+                device.createBond()
+            }else{
+                _errorState.value = BluetoothError.PermissionDenied
+            }
+        }
+        catch (exc: Exception){
+            registerDebugMessage("ERROR", "Connect method failed, details:\n${exc.printStackTrace()}")
+            _appState.value = AppState.Error("Pairing failed: ${exc.message}")
+        }
+    }
 
     override fun disconnectFromDevice() {
         try{
@@ -295,10 +333,11 @@ class CustomBluetoothController private constructor(
     // Unregister all the receivers
     fun release() {
         try{
-            appContext.unregisterReceiver(receiverDeviceFound)
+            appContext.unregisterReceiver(bluetoothDeviceFoundReceiver)
             appContext.unregisterReceiver(bluetoothConnectionReceiver)
             appContext.unregisterReceiver(bluetoothScanReceiver)
             appContext.unregisterReceiver(bluetoothStateReceiver)
+            appContext.unregisterReceiver(bluetoothBondReceiver)
         }
         catch (exc: IOException){
             registerDebugMessage("ERROR", "UnregisterReceiver failed, details: ${exc.printStackTrace()}")

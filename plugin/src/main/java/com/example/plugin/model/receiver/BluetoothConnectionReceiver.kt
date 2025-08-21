@@ -1,4 +1,4 @@
-package com.example.plugin.model
+package com.example.plugin.model.receiver
 
 import android.Manifest
 import android.bluetooth.BluetoothDevice

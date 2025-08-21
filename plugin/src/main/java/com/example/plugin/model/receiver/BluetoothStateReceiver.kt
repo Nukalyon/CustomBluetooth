@@ -1,13 +1,10 @@
-package com.example.plugin.model
+package com.example.plugin.model.receiver
 
 import android.Manifest
 import android.bluetooth.BluetoothAdapter
-import android.bluetooth.BluetoothDevice
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
-import android.os.Build
-import android.os.Build.VERSION
 import android.util.Log
 import androidx.annotation.RequiresPermission
 

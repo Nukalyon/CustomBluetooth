@@ -1,4 +1,4 @@
-package com.example.plugin.model
+package com.example.plugin.model.thread
 
 import android.annotation.SuppressLint
 import android.bluetooth.BluetoothAdapter
@@ -6,7 +6,6 @@ import android.bluetooth.BluetoothServerSocket
 import android.bluetooth.BluetoothSocket
 import android.util.Log
 import com.example.plugin.controller.CustomBluetoothController
-import com.example.plugin.controller.DataTransferService
 import java.io.IOException
 import java.util.UUID
 

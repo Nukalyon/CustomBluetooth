@@ -19,7 +19,7 @@ import kotlinx.coroutines.launch
 
 class MyUnityPlayer : UnityPlayerActivity(){
 
-
+    // Order of calls : https://stuff.mit.edu/afs/sipb/project/android/docs/images/training/basics/basic-lifecycle-create.png
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
@@ -34,6 +34,13 @@ class MyUnityPlayer : UnityPlayerActivity(){
             requireNotNull(UnityPlayer.currentActivity) { "Unity activity is null" }
         )
 
+        //Check if all the permissions listed are granted, else -> request them
+        checkAllPermission()
+        //Check if the device is visible
+        sendVisibilityState(isDeviceVisible())
+    }
+
+    private fun checkAllPermission(){
         //Check if all the permissions listed are granted, else -> request them
         permissionManager?.let {
             if(!it.checkAllPermissionsGranted()){
@@ -58,7 +65,7 @@ class MyUnityPlayer : UnityPlayerActivity(){
             } else {
                 // Handle the case where permissions are not granted
                 Log.d("INFO", "Bluetooth permissions not granted")
-                //showToast("Bluetooth permissions are required to access paired devices.")
+                //showToast("Bluetooth permissions not granted")
             }
         }
     }
@@ -75,16 +82,43 @@ class MyUnityPlayer : UnityPlayerActivity(){
             }
         }
         if(requestCode == BluetoothPermissionManager.REQUEST_VISIBILITY){
-            // Check not necessary
-            if(resultCode == RESULT_OK){
+            if(resultCode > 0){
                 // Device is being visible for TIME_VISIBLE seconds
+                sendVisibilityState(true)
+
+                // After TIME_VISIBLE sec, send an update
+                android.os.Handler(mainLooper).postDelayed({
+                    sendVisibilityState(isDeviceVisible())
+                }, (TIME_VISIBLE + 1) * 1000L)  // +1 for a little buffer
             }
             else{
                 // Device can not be found by others devices
+                sendVisibilityState(false)
             }
         }
     }
 
+
+    override fun onStart() {
+        super.onStart()
+        //Check if all the permissions listed are granted, else -> request them
+        //checkAllPermission()
+        //update the paired devices
+        getPairedDevices()
+    }
+
+    override fun onResume() {
+        super.onResume()
+        //Check if all the permissions listed are granted, else -> request them
+        //checkAllPermission()
+        //update the paired devices
+        getPairedDevices()
+    }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        controller?.release()
+    }
 
     companion object {
         // Controller reference used for Bluetooth actions
@@ -136,6 +170,20 @@ class MyUnityPlayer : UnityPlayerActivity(){
             }
             catch (exc : Exception){
                 Log.d("Unity","Couldn't decode the device for connection", exc)
+            }
+        }
+
+        @JvmStatic
+        @JvmName("pairToDevice")
+        @RequiresPermission(Manifest.permission.BLUETOOTH_CONNECT)
+        fun pairToDevice(jsonDevice: String){
+            try {
+                val customDevice = CustomBluetoothDeviceMapper().decodeSingleToDevice(jsonDevice)
+                val device = controller?.toBluetoothDevice(customDevice)
+                device?.let { controller?.pairToDevice(it) }
+            }
+            catch(exc: Exception){
+                Log.d("Unity","Couldn't decode the device for pairing", exc)
             }
         }
 
@@ -219,7 +267,12 @@ class MyUnityPlayer : UnityPlayerActivity(){
         @JvmStatic
         @JvmName("requestVisibility")
         fun requestVisibility(){
-            permissionManager?.requestVisibility(TIME_VISIBLE)
+            if(controller?.isDeviceVisible != true){
+                permissionManager?.requestVisibility(TIME_VISIBLE)
+            }
+            else{
+                sendVisibilityState(true)
+            }
         }
 
         // Send the convert bonded devices as Json to an unity gameObject
@@ -245,6 +298,14 @@ class MyUnityPlayer : UnityPlayerActivity(){
         fun sendBluetoothState(state: Boolean){
             showToast("Bluetooth turned " + if (state) "ON" else "OFF")
             UnityPlayer.UnitySendMessage("StateManager","OnBluetoothStateChange", if (state) "ON" else "OFF")
+        }
+
+        // Send the state of the device visibility when it turn visible or not
+        @JvmStatic
+        @JvmName("sendVisibilityState")
+        fun sendVisibilityState(state: Boolean){
+            showToast("Visibility turned : " + if (state) "visible" else "not visible")
+            UnityPlayer.UnitySendMessage("StateManager","OnVisibilityStateChange", if (state) "1" else "0")
         }
     }
 }
